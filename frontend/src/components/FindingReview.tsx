@@ -77,8 +77,10 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
 
       {stageIndex >= 4 && (
         <div className="finding-verdict">
-          <CardBadge severity={overturned ? "play_on" : finding.severity} />
-          {!overturned && finding.hp_delta !== 0 && <div className="hp-delta-tag">{finding.hp_delta} HP</div>}
+          <div className="card-decision">
+            <CardBadge severity={overturned ? "play_on" : finding.severity} />
+            {!overturned && finding.hp_delta !== 0 && <div className="hp-delta-tag">{finding.hp_delta} HP</div>}
+          </div>
 
           {overturned && appeal && (
             <div className="appeal-result appeal-overturned">

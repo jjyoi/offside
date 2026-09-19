@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 interface Props {
   file: string;
@@ -34,32 +34,66 @@ function extractHunkLines(diff: string, file: string): string[] {
 
 export function DiffReplay({ file, diff, onDone, skip }: Props) {
   const lines = extractHunkLines(diff, file);
-  const [visibleCount, setVisibleCount] = useState(skip ? lines.length : 0);
+  const totalCharacters = lines.reduce((total, line) => total + line.length + 1, 0);
+  const [visibleCharacters, setVisibleCharacters] = useState(skip ? totalCharacters : 0);
+  const onDoneRef = useRef(onDone);
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   useEffect(() => {
     if (skip) {
-      setVisibleCount(lines.length);
-      onDone?.();
+      onDoneRef.current?.();
       return;
     }
-    if (visibleCount >= lines.length) {
-      onDone?.();
+    if (visibleCharacters >= totalCharacters) {
+      onDoneRef.current?.();
       return;
     }
-    const timer = setTimeout(() => setVisibleCount((c) => c + 1), 180);
+    const timer = setTimeout(() => setVisibleCharacters((count) => count + 1), 28);
     return () => clearTimeout(timer);
-  }, [visibleCount, lines.length, skip]);
+  }, [visibleCharacters, totalCharacters, skip]);
+
+  const shownCharacters = skip ? totalCharacters : visibleCharacters;
+  const visibleLines = lines.reduce<{
+    remaining: number;
+    items: { index: number; fullText: string; visibleText: string }[];
+  }>(
+    (result, line, index) =>
+      result.remaining <= 0
+        ? result
+        : {
+            remaining: result.remaining - line.length - 1,
+            items: [
+              ...result.items,
+              {
+                index,
+                fullText: line,
+                visibleText: line.slice(0, result.remaining),
+              },
+            ],
+          },
+    { remaining: shownCharacters, items: [] },
+  ).items;
 
   return (
     <pre className="diff-replay">
-      {lines.slice(0, visibleCount).map((line, i) => (
+      {visibleLines.map(({ index, fullText, visibleText }, visibleIndex) => (
         <div
-          key={i}
+          key={index}
           className={
-            line.startsWith("+") ? "diff-line diff-add" : line.startsWith("-") ? "diff-line diff-remove" : "diff-line"
+            fullText.startsWith("+")
+              ? "diff-line diff-add"
+              : fullText.startsWith("-")
+                ? "diff-line diff-remove"
+                : "diff-line"
           }
         >
-          {line}
+          {visibleText}
+          {!skip && visibleIndex === visibleLines.length - 1 && shownCharacters < totalCharacters && (
+            <span className="typing-cursor" aria-hidden="true" />
+          )}
         </div>
       ))}
     </pre>

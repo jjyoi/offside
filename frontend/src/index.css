@@ -432,6 +432,16 @@ body {
   color: var(--text);
 }
 
+.typing-cursor {
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  margin-left: 0.08em;
+  vertical-align: -0.15em;
+  background: currentColor;
+  animation: typing-cursor-blink 0.75s steps(1) infinite;
+}
+
 .diff-add {
   color: var(--green);
 }
@@ -513,6 +523,10 @@ body {
   font-weight: 800;
   font-size: 1.1rem;
   letter-spacing: 0.04em;
+  width: fit-content;
+  transform-origin: center;
+  animation: card-slam 680ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, filter;
 }
 
 .card-rect {
@@ -536,7 +550,7 @@ body {
 }
 
 .card-yellow {
-  color: var(--yellow-ink);
+  color: var(--yellow);
 }
 
 .card-red .card-rect {
@@ -556,6 +570,90 @@ body {
   border-radius: 4px;
 }
 
+.card-decision {
+  width: 100%;
+  min-height: min(440px, 52vh);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.65rem;
+  text-align: center;
+}
+
+.card-decision .card-badge {
+  width: 100%;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1rem;
+  font-size: clamp(1.3rem, 3vw, 1.75rem);
+}
+
+.card-decision .card-gif {
+  width: clamp(180px, 28vw, 260px);
+  max-width: 70vw;
+  height: auto;
+  border-radius: 10px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.3);
+}
+
+.card-decision .card-rect {
+  width: clamp(120px, 20vw, 180px);
+  height: clamp(180px, 30vw, 270px);
+  border-radius: 10px;
+}
+
+@keyframes typing-cursor-blink {
+  0%,
+  48% {
+    opacity: 1;
+  }
+
+  49%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes card-slam {
+  0% {
+    opacity: 0;
+    transform: translateY(-180px) scale(1.8) rotate(-8deg);
+    filter: blur(3px) drop-shadow(0 28px 18px rgba(0, 0, 0, 0));
+  }
+
+  54% {
+    opacity: 1;
+    transform: translateY(8px) scale(0.88) rotate(2deg);
+    filter: blur(0) drop-shadow(0 3px 1px rgba(0, 0, 0, 0.45));
+  }
+
+  66% {
+    transform: translateX(-7px) translateY(-3px) scale(1.06) rotate(-1deg);
+  }
+
+  76% {
+    transform: translateX(6px) translateY(0) scale(0.98);
+  }
+
+  86% {
+    transform: translateX(-3px) scale(1.02);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translate(0) scale(1) rotate(0);
+    filter: drop-shadow(0 0 0 rgba(0, 0, 0, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-badge,
+  .typing-cursor {
+    animation: none;
+  }
+}
+
 .finding-verdict {
   display: flex;
   flex-direction: column;
@@ -568,7 +666,8 @@ body {
   font-family: var(--mono);
   font-weight: 700;
   color: var(--red);
-  font-size: 0.9rem;
+  font-size: 1.2rem;
+  letter-spacing: 0.05em;
 }
 
 /* --- Appeal --- */
