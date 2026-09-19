@@ -98,6 +98,33 @@ def claim_mentions_timeout(text: str) -> int | None:
     return int(match.group(1) or match.group(2))
 
 
+_IDENTIFIER_RE = re.compile(r"\b[a-zA-Z_][a-zA-Z0-9_]{2,}(?:\.[a-zA-Z_][a-zA-Z0-9_]*)*\b")
+
+_STOPWORDS = {
+    "the", "this", "that", "already", "here", "there", "and", "but", "for",
+    "with", "from", "into", "its", "it's", "was", "were", "been", "have",
+    "has", "had", "not", "you", "your", "our", "their", "they", "them",
+    "according", "manager", "fine", "sure", "okay", "yeah", "trust", "oops",
+}
+
+
+def extract_claim_keywords(text: str, max_keywords: int = 4) -> list[str]:
+    """Pull likely identifier/keyword tokens out of a developer's free-text appeal
+    so we can grep the repo for concrete things they're claiming exist, even when
+    the claim isn't specifically about a timeout."""
+    tokens = _IDENTIFIER_RE.findall(text)
+    seen: list[str] = []
+    for tok in tokens:
+        lowered = tok.lower()
+        if lowered in _STOPWORDS or lowered.isdigit():
+            continue
+        if tok not in seen:
+            seen.append(tok)
+        if len(seen) >= max_keywords:
+            break
+    return seen
+
+
 def lint_evidence(diff: str) -> Evidence | None:
     """Cheap deterministic lint-style pass over the diff text (no external linter dependency)."""
     added = [ln[1:] for ln in diff.splitlines() if ln.startswith("+") and not ln.startswith("+++")]

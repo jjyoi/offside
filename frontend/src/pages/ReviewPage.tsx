@@ -91,7 +91,7 @@ export function ReviewPage() {
           {isReviewing && (
             <div className="reviewing-banner">
               <div className="spinner" />
-              CHECKING POSSIBLE OFFENCE...
+              CHECKING FOR SLOP...
             </div>
           )}
 

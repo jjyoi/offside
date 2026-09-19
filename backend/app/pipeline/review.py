@@ -6,6 +6,7 @@ from app.pipeline.provider import RefereeVerdict, get_provider
 from app.store import store
 from app.tools.evidence import (
     claim_mentions_timeout,
+    extract_claim_keywords,
     git_history_evidence,
     lint_evidence,
     repo_context_evidence,
@@ -155,13 +156,21 @@ async def run_appeal_investigation(session_id: str, finding_id: str, appeal_text
     await store.emit(session_id, "appeal.started", {"findingId": finding_id, "hypothesis": hypothesis})
 
     new_evidence: list[Evidence] = []
-    timeout_claim = claim_mentions_timeout(appeal_text)
-    if timeout_claim is not None and repo_path:
-        ctx = repo_context_evidence(repo_path, finding.file, "timeout")
-        if ctx:
-            new_evidence.append(ctx)
 
     if repo_path:
+        timeout_claim = claim_mentions_timeout(appeal_text)
+        if timeout_claim is not None:
+            ctx = repo_context_evidence(repo_path, finding.file, "timeout")
+            if ctx:
+                new_evidence.append(ctx)
+
+        # Search the repo for concrete terms the developer's claim mentions
+        # (function names, identifiers, etc.), not just timeout-specific claims.
+        for keyword in extract_claim_keywords(appeal_text):
+            ctx = repo_context_evidence(repo_path, finding.file, keyword)
+            if ctx:
+                new_evidence.append(ctx)
+
         history = git_history_evidence(repo_path, finding.file, finding.start_line, finding.end_line)
         if history:
             new_evidence.append(history)
@@ -213,27 +222,41 @@ def _extract_hypothesis(text: str) -> str:
     return text.strip()[:280]
 
 
-_FAST_SYSTEM_PROMPT = """You are a fast, cheap referee reviewing a single code diff hunk for possible \
-offences (correctness, security, reliability, maintainability issues). Respond ONLY with compact JSON \
-matching this schema: {"offence": bool, "category": str, "severity": "play_on"|"yellow"|"red", \
-"confidence": float 0-1, "file": str, "start_line": int, "end_line": int, "explanation": str, "roast": str, \
-"needs_investigation": bool, "investigation_reason": str}. Set needs_investigation=true when you suspect \
-an issue but cannot confirm from the diff alone (e.g. need to check callers, tests, or history). Be terse."""
+_FAST_SYSTEM_PROMPT = """You are a fast, sharp-eyed code critic — a referee for "slop": lazy, careless, \
+unreviewed, copy-pasted-from-a-chatbot-without-reading-it code. You are judging craft and judgment, not just \
+running a linter. Read the diff hunk the way a senior engineer skims a PR: does this look like someone who \
+understood what they were doing, or like slop that got shipped because it compiled? Judge freely — style, \
+laziness, correctness, security, missing edge cases, naming, dead code, whatever actually stands out to you. \
+Don't wait for a specific keyword to trigger; form your own opinion on every hunk.
 
-_DEEP_SYSTEM_PROMPT = """You are the deep-review referee. You receive a diff hunk plus gathered evidence \
-(repo context, git history, lint). Weigh the evidence and produce a final verdict as compact JSON matching: \
+Respond ONLY with compact JSON matching this schema: {"offence": bool, "category": str, \
+"severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, "start_line": int, "end_line": int, \
+"explanation": str, "roast": str, "needs_investigation": bool, "investigation_reason": str}. \
+Set needs_investigation=true when you suspect slop but can't confirm from the diff alone (e.g. need to check \
+callers, tests, or history to know if it's actually a problem). Be terse and specific — call out exactly what \
+about it reads as slop, not a generic warning."""
+
+_DEEP_SYSTEM_PROMPT = """You are the deep-review judge. You receive a diff hunk plus gathered evidence \
+(repo context, git history, lint). Weigh the evidence like a critic building a case, not a programmer running \
+checks — the question is whether this is genuinely careless/slop code or just looked suspicious out of context. \
+Produce a final verdict as compact JSON matching: {"offence": bool, "category": str, \
+"severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, "start_line": int, "end_line": int, \
+"explanation": str, "roast": str, "needs_investigation": false, "investigation_reason": ""}. \
+The explanation must reference the evidence provided. Never invent evidence. Be willing to soften or clear a \
+verdict if the evidence explains it — you're not trying to maximize red cards, you're trying to be right."""
+
+_APPEAL_SYSTEM_PROMPT = """You are the appeals judge. A developer is contesting a finding with a specific \
+claim. You receive the original finding plus newly gathered evidence targeted at verifying that claim. \
+Judge like a fair critic, not an adversary: if the evidence genuinely supports a reasonable, defensible \
+explanation for the code — even a partial one — lean toward overturning or downgrading rather than defending \
+the original call out of stubbornness. But don't overturn on vibes; the evidence has to actually back the \
+claim. Decide whether the evidence supports the developer's claim (offence=false / severity=play_on to \
+overturn, or downgrade red to yellow if the claim only partially justifies it) or contradicts it (keep \
+offence=true and the original severity to uphold). Respond ONLY with compact JSON matching: \
 {"offence": bool, "category": str, "severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, \
 "start_line": int, "end_line": int, "explanation": str, "roast": str, "needs_investigation": false, \
-"investigation_reason": ""}. The explanation must reference the evidence provided. Never invent evidence."""
-
-_APPEAL_SYSTEM_PROMPT = """You are the appeals referee. A developer is contesting a finding with a specific \
-claim. You receive the original finding plus newly gathered evidence targeted at verifying that claim. \
-Decide whether the evidence supports the developer's claim (offence=false / severity=play_on to overturn) \
-or contradicts it (keep offence=true and the original-or-adjusted severity to uphold). Respond ONLY with \
-compact JSON matching: {"offence": bool, "category": str, "severity": "play_on"|"yellow"|"red", \
-"confidence": float 0-1, "file": str, "start_line": int, "end_line": int, "explanation": str, "roast": str, \
-"needs_investigation": false, "investigation_reason": ""}. The explanation must state what the new evidence \
-showed and why it does or doesn't support the developer."""
+"investigation_reason": ""}. The explanation must state what the new evidence showed and why it does or \
+doesn't support the developer."""
 
 
 def _build_fast_prompt(file: str, hunk_raw: str) -> str:

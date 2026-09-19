@@ -4,6 +4,7 @@ import { DiffReplay } from "./DiffReplay";
 import { CardBadge } from "./CardBadge";
 import { EvidenceList } from "./EvidenceList";
 import { AppealForm } from "./AppealForm";
+import { CoachRunning } from "./CoachRunning";
 
 type Stage = "diff" | "explanation" | "evidence" | "roast" | "verdict";
 
@@ -60,7 +61,7 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
 
       {stageIndex >= 1 && (
         <div className="finding-explanation">
-          <div className="section-heading">Technical Finding</div>
+          <div className="section-heading">The Case Against It</div>
           <p>{finding.explanation}</p>
         </div>
       )}
@@ -91,8 +92,16 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
           {appeal && appeal.outcome === "stands" && (
             <div className="appeal-result appeal-stands">
               <div className="section-heading">DECISION STANDS</div>
-              <p className="appeal-note">New evidence gathered:</p>
-              <EvidenceList evidence={appeal.second_pass_evidence} />
+              {appeal.second_pass_evidence.length > 0 ? (
+                <>
+                  <p className="appeal-note">New evidence gathered:</p>
+                  <EvidenceList evidence={appeal.second_pass_evidence} />
+                </>
+              ) : (
+                <p className="appeal-note">
+                  No supporting evidence was found in the repository for this claim. The original call stands.
+                </p>
+              )}
             </div>
           )}
 
@@ -100,9 +109,7 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
             <AppealForm onSubmit={(text) => onContest(finding.id, text)} disabled={appealPending} />
           )}
 
-          {appealSubmitted && !appeal && (
-            <div className="appeal-pending">Coach is running onto the pitch... investigating your claim.</div>
-          )}
+          {appealSubmitted && !appeal && <CoachRunning />}
         </div>
       )}
     </div>
