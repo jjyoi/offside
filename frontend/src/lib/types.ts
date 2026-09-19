@@ -58,6 +58,7 @@ export interface ReviewSession {
   remote_sha?: string | null;
   diff: string;
   commits: string[];
+  author?: string | null;
   status: ReviewStatus;
   hp_before: number;
   hp_after: number;

@@ -16,6 +16,7 @@ class PushRange:
     branch: str
     diff: str
     commits: list[str]
+    author: str | None = None
 
 
 def _run(args: list[str], cwd: str | None = None) -> str:
@@ -59,6 +60,12 @@ def read_stdin_refs() -> list[tuple[str, str, str, str]]:
     return refs
 
 
+def commit_author(sha: str, cwd: str | None = None) -> str | None:
+    """Name of the commit author for the tip of the push range."""
+    author = _run(["git", "log", "-1", "--format=%an", sha], cwd=cwd)
+    return author or None
+
+
 def build_push_range(
     local_ref: str, local_sha: str, remote_ref: str, remote_sha: str, cwd: str | None = None
 ) -> PushRange:
@@ -79,4 +86,7 @@ def build_push_range(
         remote_sha_out = remote_sha
 
     commits = [c for c in commits_raw.splitlines() if c.strip()]
-    return PushRange(local_ref, local_sha, remote_ref, remote_sha_out, branch, diff=diff, commits=commits)
+    author = commit_author(local_sha, cwd=cwd)
+    return PushRange(
+        local_ref, local_sha, remote_ref, remote_sha_out, branch, diff=diff, commits=commits, author=author
+    )

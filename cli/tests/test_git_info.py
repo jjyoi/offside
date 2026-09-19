@@ -42,6 +42,7 @@ def test_build_push_range_diffs_against_remote_sha(repo):
     assert "-one" in pr.diff
     assert "+two" in pr.diff
     assert len(pr.commits) == 1
+    assert pr.author == "Test"
 
 
 def test_build_push_range_new_branch_diffs_against_merge_base(repo):

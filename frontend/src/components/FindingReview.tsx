@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import type { Appeal, Finding } from "../lib/types";
 import { DiffReplay } from "./DiffReplay";
@@ -17,6 +17,7 @@ interface Props {
   appeal?: Appeal;
   appealPending: boolean;
   appealSubmitted: boolean;
+  playerName?: string | null;
   onVerdict: (findingId: string) => void;
   onContest: (findingId: string, text: string) => void;
 }
@@ -29,9 +30,29 @@ const fadeUp = {
   transition: { duration: 0.35, ease: "easeOut" as const },
 };
 
-export function FindingReview({ finding, index, diff, skip, appeal, appealPending, appealSubmitted, onContest, onVerdict }: Props) {
+export function FindingReview({
+  finding,
+  index,
+  diff,
+  skip,
+  appeal,
+  appealPending,
+  appealSubmitted,
+  playerName,
+  onContest,
+  onVerdict,
+}: Props) {
   const [stageIndex, setStageIndex] = useState(skip ? STAGE_ORDER.length - 1 : 0);
   const stage = STAGE_ORDER[stageIndex];
+  const [bookingKey, setBookingKey] = useState(0);
+  const bookedOutcome = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (appeal?.outcome === "stands" && bookedOutcome.current !== appeal.id) {
+      bookedOutcome.current = appeal.id;
+      setBookingKey((k) => k + 1);
+    }
+  }, [appeal]);
 
   useEffect(() => {
     if (skip) {
@@ -106,7 +127,13 @@ export function FindingReview({ finding, index, diff, skip, appeal, appealPendin
           transition={{ duration: 0.3 }}
         >
           <div className="card-decision">
-            <CardBadge severity={overturned ? "play_on" : finding.severity} muted={skip} />
+            <CardBadge
+              severity={overturned ? "play_on" : finding.severity}
+              muted={skip}
+              playerName={appeal?.outcome === "stands" ? playerName : null}
+              bookingKey={bookingKey}
+              bookingCaption={bookingKey > 0 ? "DECISION STANDS" : undefined}
+            />
             {!overturned && finding.hp_delta !== 0 && <div className="hp-delta-tag">{finding.hp_delta} HP</div>}
           </div>
 

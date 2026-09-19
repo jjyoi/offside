@@ -5,6 +5,7 @@ import { VarIntro } from "../components/VarIntro";
 import { FindingReview } from "../components/FindingReview";
 import { CardBadge } from "../components/CardBadge";
 import { HpBar } from "../components/HpBar";
+import { BookingsTracker } from "../components/BookingsTracker";
 import { submitAppeal, continuePush } from "../lib/api";
 
 export function ReviewPage() {
@@ -143,6 +144,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                   appeal={appeal}
                   appealPending={pendingAppealFindingId === finding.id}
                   appealSubmitted={submittedAppealFindingIds.has(finding.id)}
+                  playerName={session.author}
                   onContest={handleContest}
                 />
               );
@@ -176,6 +178,13 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
           {session.status === "blocked" && (
             <div className="terminal-banner terminal-blocked">PUSH BLOCKED — the waiting `git push` has been stopped.</div>
           )}
+
+          <BookingsTracker
+            findings={session.findings}
+            appeals={session.appeals}
+            playerName={session.author}
+            revealedIds={revealedIds}
+          />
         </>
       )}
     </div>

@@ -92,6 +92,7 @@ class ReviewSession(BaseModel):
     remote_sha: str | None = None
     diff: str
     commits: list[str] = Field(default_factory=list)
+    author: str | None = None
 
     status: ReviewStatus = ReviewStatus.collecting
 

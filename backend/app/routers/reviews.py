@@ -23,6 +23,7 @@ class CreateReviewRequest(BaseModel):
     diff: str
     commits: list[str] = []
     repo_path: str | None = None
+    author: str | None = None
 
 
 class CreateReviewResponse(BaseModel):
@@ -47,6 +48,7 @@ async def create_review(req: CreateReviewRequest) -> CreateReviewResponse:
         remote_sha=req.remote_sha,
         diff=req.diff,
         commits=req.commits,
+        author=req.author,
     )
     await store.create(session)
     _repo_paths[session.id] = req.repo_path

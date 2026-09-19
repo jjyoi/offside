@@ -17,8 +17,20 @@ const SLAP_CAPTIONS: Partial<Record<Severity, string>> = {
 
 const SLAP_DURATION_MS = 3000;
 
-export function CardBadge({ severity, muted }: { severity: Severity; muted?: boolean }) {
+interface Props {
+  severity: Severity;
+  muted?: boolean;
+  /** Player being booked — printed on the card during the slap. */
+  playerName?: string | null;
+  /** Bump this to re-trigger the full slap animation (e.g. a failed contest). */
+  bookingKey?: number;
+  /** Caption shown under the card instead of the default YELLOW/RED CARD text. */
+  bookingCaption?: string;
+}
+
+export function CardBadge({ severity, muted, playerName, bookingKey = 0, bookingCaption }: Props) {
   const played = useRef(false);
+  const lastBookingKey = useRef(bookingKey);
   const [slapping, setSlapping] = useState(!muted && severity !== "play_on");
 
   useEffect(() => {
@@ -37,6 +49,17 @@ export function CardBadge({ severity, muted }: { severity: Severity; muted?: boo
     return () => clearTimeout(timer);
   }, [severity]);
 
+  useEffect(() => {
+    if (bookingKey === lastBookingKey.current) return;
+    lastBookingKey.current = bookingKey;
+    playCardStamp();
+    setSlapping(true);
+    const timer = setTimeout(() => setSlapping(false), SLAP_DURATION_MS);
+    return () => clearTimeout(timer);
+  }, [bookingKey]);
+
+  const caption = bookingCaption ?? SLAP_CAPTIONS[severity];
+
   return (
     <div className={`card-badge card-${severity}`}>
       <AnimatePresence>
@@ -54,8 +77,19 @@ export function CardBadge({ severity, muted }: { severity: Severity; muted?: boo
               animate={{ scale: 1, opacity: 1, rotate: -4, y: 0 }}
               exit={{ scale: 0.35, opacity: 0, rotate: 2, y: 0, transition: { duration: 0.35, ease: "easeIn" } }}
               transition={{ type: "spring", stiffness: 380, damping: 22, mass: 0.9 }}
-            />
-            {SLAP_CAPTIONS[severity] && (
+            >
+              {playerName && (
+                <motion.span
+                  className="card-slap-name"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4, duration: 0.3 }}
+                >
+                  {playerName}
+                </motion.span>
+              )}
+            </motion.div>
+            {caption && (
               <motion.div
                 className={`card-slap-caption card-slap-caption-${severity}`}
                 initial={{ opacity: 0, y: 16 }}
@@ -63,7 +97,7 @@ export function CardBadge({ severity, muted }: { severity: Severity; muted?: boo
                 exit={{ opacity: 0, y: 8, transition: { duration: 0.25 } }}
                 transition={{ delay: 0.35, duration: 0.4, ease: "easeOut" }}
               >
-                {SLAP_CAPTIONS[severity]}
+                {caption}
               </motion.div>
             )}
           </motion.div>

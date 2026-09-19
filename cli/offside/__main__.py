@@ -74,6 +74,7 @@ def review_one(repo_slug: str, repo_root: str, push_range: git_info.PushRange) -
                     "diff": push_range.diff,
                     "commits": push_range.commits,
                     "repo_path": repo_root,
+                    "author": push_range.author,
                 },
             )
             resp.raise_for_status()
