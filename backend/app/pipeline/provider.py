@@ -1,0 +1,277 @@
+from __future__ import annotations
+
+import json
+import os
+import re
+import time
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
+
+from openai import AsyncOpenAI
+from pydantic import BaseModel, ValidationError
+
+_TIMEOUT_CLAIM_RE = re.compile(
+    r"timeout\s*[:=]?\s*(\d+)|(\d+)[\s-]*(?:second|sec|ms|millisecond)s?\s*timeout", re.IGNORECASE
+)
+
+
+def claim_mentions_timeout(text: str) -> int | None:
+    match = _TIMEOUT_CLAIM_RE.search(text)
+    if not match:
+        return None
+    return int(match.group(1) or match.group(2))
+
+
+class RefereeVerdict(BaseModel):
+    """Structured output every model call must produce, before it becomes a Finding."""
+
+    offence: bool
+    category: str = "none"
+    severity: str = "play_on"  # play_on | yellow | red
+    confidence: float = 0.0
+    file: str | None = None
+    start_line: int | None = None
+    end_line: int | None = None
+    explanation: str = ""
+    roast: str = ""
+    needs_investigation: bool = False
+    investigation_reason: str = ""
+
+
+@dataclass
+class ModelResult:
+    verdict: RefereeVerdict
+    latency_ms: float
+    model_name: str
+    raw: str
+
+
+class ModelProvider(ABC):
+    name: str
+
+    @abstractmethod
+    async def complete(self, system: str, prompt: str) -> ModelResult: ...
+
+
+class BasetenProvider(ModelProvider):
+    """Calls a Baseten Model API using the OpenAI-compatible client.
+
+    Baseten exposes any supported model behind https://inference.baseten.co/v1,
+    so we can use the standard `openai` SDK with the Baseten API key rather than
+    hand-rolling requests against a model-specific predict URL.
+    """
+
+    def __init__(self, model_id: str, api_key: str, base_url: str | None = None, label: str = "baseten") -> None:
+        self.model_id = model_id
+        self.name = label
+        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url or "https://inference.baseten.co/v1")
+
+    async def complete(self, system: str, prompt: str) -> ModelResult:
+        start = time.perf_counter()
+        response = await self._client.chat.completions.create(
+            model=self.model_id,
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": prompt},
+            ],
+            top_p=1,
+            max_tokens=1000,
+            temperature=0.2,
+            presence_penalty=0,
+            frequency_penalty=0,
+        )
+
+        text = response.choices[0].message.content or ""
+        latency_ms = (time.perf_counter() - start) * 1000
+        verdict = _parse_verdict(text)
+        return ModelResult(verdict=verdict, latency_ms=latency_ms, model_name=self.name, raw=text)
+
+
+class RuleBasedProvider(ModelProvider):
+    """Deterministic fallback referee used when no model API key is configured.
+
+    Applies transparent heuristics over the diff so the full pipeline (evidence
+    gathering, verdicts, appeals) works end-to-end without any external API.
+    """
+
+    def __init__(self, label: str = "rule-based-fallback") -> None:
+        self.name = label
+
+    async def complete(self, system: str, prompt: str) -> ModelResult:
+        start = time.perf_counter()
+        if "DEVELOPER'S APPEAL:" in prompt:
+            verdict = _heuristic_appeal_verdict(prompt)
+        else:
+            verdict = _heuristic_verdict(prompt)
+        latency_ms = (time.perf_counter() - start) * 1000
+        return ModelResult(verdict=verdict, latency_ms=latency_ms, model_name=self.name, raw=json.dumps(verdict.model_dump()))
+
+
+def _parse_verdict(text: str) -> RefereeVerdict:
+    cleaned = text.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+    try:
+        obj = json.loads(cleaned)
+        return RefereeVerdict.model_validate(obj)
+    except (json.JSONDecodeError, ValidationError):
+        return RefereeVerdict(
+            offence=False,
+            severity="play_on",
+            confidence=0.0,
+            explanation="Model returned malformed output; failing open per spec fallback policy.",
+            roast="Even the ref couldn't read their own notes on this one.",
+        )
+
+
+_RISK_PATTERNS = [
+    ("timeout", "reliability", "yellow", 0.6, True),
+    ("AbortSignal", "reliability", "yellow", 0.6, True),
+    ("eval(", "security", "red", 0.85, True),
+    ("exec(", "security", "red", 0.8, True),
+    ("DROP TABLE", "security", "red", 0.9, False),
+    ("password", "security", "yellow", 0.5, True),
+    ("TODO", "maintainability", "yellow", 0.35, False),
+    ("except:", "reliability", "yellow", 0.5, False),
+    ("except Exception:", "reliability", "yellow", 0.4, False),
+    ("console.log", "maintainability", "play_on", 0.2, False),
+]
+
+
+_SEVERITY_RANK = {"red": 2, "yellow": 1, "play_on": 0}
+
+
+def _heuristic_verdict(prompt: str) -> RefereeVerdict:
+    lowered_lines = [ln for ln in prompt.splitlines() if ln.startswith("+")]
+    removed_lines = [ln for ln in prompt.splitlines() if ln.startswith("-") and not ln.startswith("---")]
+    added_text = "\n".join(lowered_lines)
+    removed_text = "\n".join(removed_lines)
+
+    # Scan every pattern and keep the most severe match, instead of returning on the
+    # first hit in list order — a hunk can both remove a guard AND introduce a worse
+    # issue (e.g. drop a timeout while adding an eval()), and the worse one must win.
+    best: RefereeVerdict | None = None
+
+    for pattern, category, severity, confidence, needs_investigation in _RISK_PATTERNS:
+        if pattern in added_text:
+            candidate = RefereeVerdict(
+                offence=True,
+                category=category,
+                severity=severity,
+                confidence=confidence,
+                explanation=f"Detected potential {category} issue: pattern '{pattern}' found in the outgoing diff.",
+                roast=_roast_for(category, severity),
+                needs_investigation=needs_investigation,
+                investigation_reason=f"Added line contains '{pattern}'.",
+            )
+            if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
+                best = candidate
+
+        if pattern in removed_text and pattern in {"timeout", "AbortSignal"}:
+            candidate = RefereeVerdict(
+                offence=True,
+                category="reliability",
+                severity="yellow",
+                confidence=0.55,
+                explanation=f"A line containing '{pattern}' was removed from the diff, which may drop a safety guard.",
+                roast=_roast_for("reliability", "yellow"),
+                needs_investigation=True,
+                investigation_reason=f"Removed guard containing '{pattern}'; verify callers still enforce it.",
+            )
+            if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
+                best = candidate
+
+    if best is not None:
+        return best
+
+    return RefereeVerdict(
+        offence=False,
+        category="none",
+        severity="play_on",
+        confidence=0.9,
+        explanation="No suspicious patterns detected in the outgoing diff.",
+        roast="Clean run, no whistle needed.",
+    )
+
+
+def _heuristic_appeal_verdict(prompt: str) -> RefereeVerdict:
+    """Judges an appeal prompt (ORIGINAL FINDING / DEVELOPER'S APPEAL / NEW EVIDENCE sections).
+
+    Conservative by design: overturning requires evidence whose summary text actually
+    corroborates the developer's specific claim, not merely the presence of any evidence.
+    Security/red findings require stronger corroboration than reliability/yellow findings,
+    since the cost of a false negative is higher.
+    """
+    original_severity = "yellow"
+    if "Severity: red" in prompt:
+        original_severity = "red"
+
+    category = "reliability"
+    if "security" in prompt.lower():
+        category = "security"
+
+    appeal_section = prompt.split("DEVELOPER'S APPEAL:", 1)[-1]
+    claim_text = appeal_section.split("EXTRACTED HYPOTHESIS:", 1)[0].lower()
+
+    evidence_section = prompt.split("NEW EVIDENCE GATHERED", 1)[-1].lower()
+    has_real_evidence = "none" not in evidence_section.strip()[:8] and evidence_section.strip()
+
+    timeout_claim = claim_mentions_timeout(claim_text)
+    evidence_corroborates_timeout = (
+        timeout_claim is not None
+        and "repo_context" in evidence_section
+        and ("timeout" in evidence_section or "caller" in evidence_section)
+    )
+
+    strong_enough = evidence_corroborates_timeout and has_real_evidence
+    if category == "security" or original_severity == "red":
+        # Require the caller/repo_context evidence specifically, not just git history,
+        # before overturning a security-flagged finding.
+        strong_enough = strong_enough and "repo_context" in evidence_section
+
+    if strong_enough:
+        return RefereeVerdict(
+            offence=False,
+            category=category,
+            severity="play_on",
+            confidence=0.75,
+            explanation="New evidence corroborates the developer's claim: comparable call sites "
+            "and/or callers confirm the safeguard the developer described is present.",
+            roast="Fair cop, ref got it wrong. Play on.",
+        )
+
+    return RefereeVerdict(
+        offence=True,
+        category=category,
+        severity=original_severity,
+        confidence=0.7,
+        explanation="The new evidence gathered does not corroborate the developer's claim. "
+        "No caller or repository context was found that supports the stated safeguard.",
+        roast="Nice try, but VAR isn't buying it without receipts.",
+    )
+
+
+def _roast_for(category: str, severity: str) -> str:
+    roasts = {
+        ("security", "red"): "That's not a code review finding, that's a police report waiting to happen.",
+        ("security", "yellow"): "Bold of you to assume nobody reads the diff.",
+        ("reliability", "yellow"): "Removing the seatbelt and calling it a performance improvement.",
+        ("maintainability", "yellow"): "A TODO is just a bug you've scheduled for later.",
+    }
+    return roasts.get((category, severity), "The ref has seen worse, but not much worse.")
+
+
+def get_provider(tier: str) -> ModelProvider:
+    """tier: 'fast' or 'deep'. Returns Baseten if configured, else the rule-based fallback."""
+    api_key = os.environ.get("BASETEN_API_KEY")
+    if tier == "fast":
+        model_id = os.environ.get("BASETEN_FAST_MODEL_ID")
+    else:
+        model_id = os.environ.get("BASETEN_DEEP_MODEL_ID")
+
+    if api_key and model_id:
+        return BasetenProvider(model_id=model_id, api_key=api_key, label=f"baseten-{tier}")
+
+    return RuleBasedProvider(label=f"rule-based-{tier}")
