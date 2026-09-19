@@ -19,7 +19,10 @@ export function ReviewPage() {
   if (error) {
     return (
       <div className="page-center">
-        <div className="error-box">Could not load review session: {error}</div>
+        <div className="poster poster-error" role="alert">
+          <h1 className="poster-title">Abandoned match</h1>
+          <p>Could not load review session: {error}</p>
+        </div>
       </div>
     );
   }
@@ -27,7 +30,11 @@ export function ReviewPage() {
   if (!session) {
     return (
       <div className="page-center">
-        <div className="loading">Loading review session...</div>
+        <div className="poster">
+          <div className="ball" aria-hidden="true" />
+          <h1 className="poster-title">Warming up</h1>
+          <p>Loading review session...</p>
+        </div>
       </div>
     );
   }
@@ -70,10 +77,14 @@ export function ReviewPage() {
 
   return (
     <div className="review-page">
-      <header className="review-header">
-        <div className="review-meta">
-          <span className="repo-tag">{session.repo}</span>
-          <span className="branch-tag">{session.branch}</span>
+      <header className="scoreboard">
+        <div className="wordmark">
+          Offside <span className="wordmark-var">VAR</span>
+        </div>
+        <div className="fixture">
+          <span className="team" title={session.repo}>{session.repo}</span>
+          <span className="fixture-vs">v</span>
+          <span className="team" title={session.branch}>{session.branch}</span>
         </div>
         <HpBar hpBefore={session.hp_before} hpAfter={session.hp_after} />
       </header>
@@ -90,25 +101,26 @@ export function ReviewPage() {
 
           {isReviewing && (
             <div className="reviewing-banner">
-              <div className="spinner" />
-              CHECKING FOR SLOP...
+              <div className="ball" aria-hidden="true" />
+              Checking for slop...
             </div>
           )}
 
           {noFindings && (
             <div className="play-on-banner">
               <CardBadge severity="play_on" />
-              <p>No actionable issues found. Clean run.</p>
+              <p>No actionable issues found. Clean run. Play on.</p>
             </div>
           )}
 
           <div className="findings-list">
-            {session.findings.map((finding) => {
+            {session.findings.map((finding, index) => {
               const appeal = session.appeals.find((a) => a.finding_id === finding.id);
               return (
                 <FindingReview
                   key={finding.id}
                   finding={finding}
+                  index={index}
                   diff={session.diff}
                   skip={skip}
                   appeal={appeal}

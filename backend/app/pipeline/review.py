@@ -198,18 +198,19 @@ async def run_appeal_investigation(session_id: str, finding_id: str, appeal_text
 
     appeals = [*session.appeals, appeal]
 
-    if outcome == "overturned":
-        findings = [f for f in session.findings if f.id != finding_id]
-        hp_after = session.hp_before + sum(f.hp_delta for f in findings)
-        hp_after = max(hp_after, 0)
-        await store.update(session_id, findings=findings, appeals=appeals, hp_after=hp_after)
-    else:
-        await store.update(session_id, appeals=appeals)
+    # Findings stay in the list even when overturned — the browser needs the
+    # finding + evidence to still be there to render the "DECISION OVERTURNED"
+    # card. Only the HP/blocking effect of an overturned finding is nulled out.
+    overturned_ids = {a.finding_id for a in appeals if a.outcome == AppealOutcome.overturned}
+    hp_after = session.hp_before + sum(f.hp_delta for f in session.findings if f.id not in overturned_ids)
+    hp_after = max(hp_after, 0)
 
+    await store.update(session_id, appeals=appeals, hp_after=hp_after)
     await store.emit(session_id, "appeal.completed", {"findingId": finding_id, "outcome": outcome})
 
     session = store.get(session_id)
-    if session.findings:
+    unresolved = [f for f in session.findings if f.id not in overturned_ids]
+    if unresolved:
         # Any remaining card (yellow or red, including this one if it stood) still
         # needs an explicit developer decision in the browser.
         await store.update(session_id, status=ReviewStatus.awaiting_appeal)

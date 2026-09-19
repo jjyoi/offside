@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "motion/react";
 import type { Appeal, Finding } from "../lib/types";
 import { DiffReplay } from "./DiffReplay";
 import { CardBadge } from "./CardBadge";
@@ -10,6 +11,7 @@ type Stage = "diff" | "explanation" | "evidence" | "roast" | "verdict";
 
 interface Props {
   finding: Finding;
+  index: number;
   diff: string;
   skip: boolean;
   appeal?: Appeal;
@@ -20,7 +22,13 @@ interface Props {
 
 const STAGE_ORDER: Stage[] = ["diff", "explanation", "evidence", "roast", "verdict"];
 
-export function FindingReview({ finding, diff, skip, appeal, appealPending, appealSubmitted, onContest }: Props) {
+const fadeUp = {
+  initial: { opacity: 0, y: 8 },
+  animate: { opacity: 1, y: 0 },
+  transition: { duration: 0.35, ease: "easeOut" as const },
+};
+
+export function FindingReview({ finding, index, diff, skip, appeal, appealPending, appealSubmitted, onContest }: Props) {
   const [stageIndex, setStageIndex] = useState(skip ? STAGE_ORDER.length - 1 : 0);
   const stage = STAGE_ORDER[stageIndex];
 
@@ -34,15 +42,16 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
 
   useEffect(() => {
     if (stage === "diff" || skip) return;
-    const timer = setTimeout(advance, stage === "explanation" ? 900 : stage === "evidence" ? 900 : 700);
+    const timer = setTimeout(advance, stage === "explanation" ? 700 : stage === "evidence" ? 700 : 500);
     return () => clearTimeout(timer);
   }, [stage, skip]);
 
   const overturned = appeal?.outcome === "overturned";
 
   return (
-    <div className="finding-card">
+    <motion.div className="finding-card" {...fadeUp}>
       <div className="finding-header">
+        <span className="incident-no">Incident {String(index + 1).padStart(2, "0")}</span>
         <span className="finding-file">
           {finding.file}:{finding.start_line}
           {finding.end_line !== finding.start_line ? `-${finding.end_line}` : ""}
@@ -59,24 +68,38 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
         skip={skip}
       />
 
-      {stageIndex >= 1 && (
-        <div className="finding-explanation">
-          <div className="section-heading">The Case Against It</div>
-          <p>{finding.explanation}</p>
-        </div>
-      )}
+      <AnimatePresence>
+        {stageIndex >= 1 && (
+          <motion.div className="finding-explanation" key="explanation" {...fadeUp}>
+            <span className="eyebrow">The case against it</span>
+            <p>{finding.explanation}</p>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {stageIndex >= 2 && <EvidenceList evidence={finding.evidence} />}
+      <AnimatePresence>
+        {stageIndex >= 2 && (
+          <motion.div key="evidence" {...fadeUp}>
+            <EvidenceList evidence={finding.evidence} />
+          </motion.div>
+        )}
+      </AnimatePresence>
 
-      {stageIndex >= 3 && (
-        <div className="finding-roast">
-          <div className="section-heading">Commentary</div>
-          <p>&ldquo;{finding.roast}&rdquo;</p>
-        </div>
-      )}
+      <AnimatePresence>
+        {stageIndex >= 3 && (
+          <motion.div className="finding-roast" key="roast" {...fadeUp}>
+            <blockquote className="bubble">{finding.roast}</blockquote>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {stageIndex >= 4 && (
-        <div className="finding-verdict">
+        <motion.div
+          className="finding-verdict"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        >
           <div className="card-decision">
             <CardBadge severity={overturned ? "play_on" : finding.severity} />
             {!overturned && finding.hp_delta !== 0 && <div className="hp-delta-tag">{finding.hp_delta} HP</div>}
@@ -84,7 +107,7 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
 
           {overturned && appeal && (
             <div className="appeal-result appeal-overturned">
-              <div className="section-heading">DECISION OVERTURNED</div>
+              <span className="eyebrow">Decision overturned</span>
               <p>{appeal.text}</p>
               <EvidenceList evidence={appeal.second_pass_evidence} />
               <p className="appeal-restored">HP restored.</p>
@@ -93,7 +116,7 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
 
           {appeal && appeal.outcome === "stands" && (
             <div className="appeal-result appeal-stands">
-              <div className="section-heading">DECISION STANDS</div>
+              <span className="eyebrow">Decision stands</span>
               {appeal.second_pass_evidence.length > 0 ? (
                 <>
                   <p className="appeal-note">New evidence gathered:</p>
@@ -112,8 +135,8 @@ export function FindingReview({ finding, diff, skip, appeal, appealPending, appe
           )}
 
           {appealSubmitted && !appeal && <CoachRunning />}
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 }

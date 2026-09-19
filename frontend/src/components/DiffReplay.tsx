@@ -51,7 +51,7 @@ export function DiffReplay({ file, diff, onDone, skip }: Props) {
       onDoneRef.current?.();
       return;
     }
-    const timer = setTimeout(() => setVisibleCharacters((count) => count + 1), 28);
+    const timer = setTimeout(() => setVisibleCharacters((count) => count + 3), 10);
     return () => clearTimeout(timer);
   }, [visibleCharacters, totalCharacters, skip]);
 
@@ -78,24 +78,33 @@ export function DiffReplay({ file, diff, onDone, skip }: Props) {
   ).items;
 
   return (
-    <pre className="diff-replay">
-      {visibleLines.map(({ index, fullText, visibleText }, visibleIndex) => (
-        <div
-          key={index}
-          className={
-            fullText.startsWith("+")
-              ? "diff-line diff-add"
-              : fullText.startsWith("-")
-                ? "diff-line diff-remove"
-                : "diff-line"
-          }
-        >
-          {visibleText}
-          {!skip && visibleIndex === visibleLines.length - 1 && shownCharacters < totalCharacters && (
-            <span className="typing-cursor" aria-hidden="true" />
-          )}
-        </div>
-      ))}
-    </pre>
+    <div className="replay">
+      <div className="replay-bar">
+        <span className="rec">
+          <i aria-hidden="true" />
+          Replay
+        </span>
+        <span>Slow-mo</span>
+      </div>
+      <pre className="diff-replay">
+        {visibleLines.map(({ index, fullText, visibleText }, visibleIndex) => (
+          <div
+            key={index}
+            className={
+              fullText.startsWith("+")
+                ? "diff-line diff-add"
+                : fullText.startsWith("-")
+                  ? "diff-line diff-remove"
+                  : "diff-line"
+            }
+          >
+            {visibleText}
+            {!skip && visibleIndex === visibleLines.length - 1 && shownCharacters < totalCharacters && (
+              <span className="typing-cursor" aria-hidden="true" />
+            )}
+          </div>
+        ))}
+      </pre>
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import pytest
 
 from app.models import ReviewSession, ReviewStatus
+from app.pipeline import review as review_module
 from app.pipeline.review import run_appeal_investigation, run_review
 from app.store import SessionStore
 
@@ -85,3 +86,37 @@ async def test_appeal_outcome_recorded_with_hypothesis_and_evidence(patched_stor
     assert appeal.finding_id == finding_id
     assert appeal.claimed_hypothesis == "input is sanitized upstream"
     assert appeal.outcome in ("overturned", "stands")
+
+
+class _AlwaysOverturnProvider:
+    """Stub provider that always rules in the developer's favor, so we can test
+    the overturned-finding bookkeeping without depending on LLM judgment."""
+
+    name = "stub-overturn"
+
+    async def complete(self, system, prompt):
+        from app.pipeline.provider import ModelResult, RefereeVerdict
+
+        verdict = RefereeVerdict(offence=False, severity="play_on", confidence=0.9, explanation="cleared", roast="")
+        return ModelResult(verdict=verdict, latency_ms=0.0, model_name=self.name, raw="{}")
+
+
+async def test_overturned_finding_stays_visible_and_stops_blocking(patched_store, monkeypatch):
+    """Regression test: an overturned finding must remain in session.findings
+    (so the browser can render the 'DECISION OVERTURNED' card) while no longer
+    contributing to HP loss or blocking the push."""
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=RED_DIFF)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+
+    finding_id = patched_store.get(session.id).findings[0].id
+
+    monkeypatch.setattr(review_module, "get_provider", lambda tier: _AlwaysOverturnProvider())
+    await run_appeal_investigation(session.id, finding_id, "the caller already handles this", repo_path=None)
+
+    result = patched_store.get(session.id)
+    assert result.appeals[-1].outcome == "overturned"
+    assert len(result.findings) == 1  # finding is NOT removed
+    assert result.findings[0].id == finding_id
+    assert result.hp_after == result.hp_before  # HP fully restored
+    assert result.status == ReviewStatus.approved  # no longer blocks

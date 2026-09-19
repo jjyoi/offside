@@ -54,6 +54,25 @@ def git_history_evidence(repo_path: str, file: str, start_line: int, end_line: i
     )
 
 
+_MAX_EVIDENCE_SNIPPETS = 3
+_MAX_SNIPPET_LEN = 160
+
+
+def _format_snippets(lines: list[str]) -> str:
+    """Render matched grep lines (path:lineno:content) as readable code snippets
+    so the judge can actually see what was found, not just a count."""
+    snippets = []
+    for ln in lines[:_MAX_EVIDENCE_SNIPPETS]:
+        parts = ln.split(":", 2)
+        if len(parts) == 3:
+            path, lineno, content = parts
+            content = content.strip()[:_MAX_SNIPPET_LEN]
+            snippets.append(f"{path}:{lineno}: `{content}`")
+        else:
+            snippets.append(ln.strip()[:_MAX_SNIPPET_LEN])
+    return "; ".join(snippets)
+
+
 def repo_context_evidence(repo_path: str, file: str, pattern: str) -> Evidence | None:
     """Search the repo for sibling call sites of a pattern to establish convention."""
     if not repo_path:
@@ -63,11 +82,11 @@ def repo_context_evidence(repo_path: str, file: str, pattern: str) -> Evidence |
         return None
     lines = [ln for ln in output.splitlines() if ln.strip()]
     count = len(lines)
-    sample = lines[0] if lines else ""
+    snippets = _format_snippets(lines)
     return Evidence(
         type=EvidenceType.repo_context,
-        summary=f"Found {count} comparable usage(s) of '{pattern}' elsewhere in the repo.",
-        source_ref=sample.split(":")[0] if sample else None,
+        summary=f"Found {count} usage(s) of '{pattern}' elsewhere in the repo: {snippets}",
+        source_ref=lines[0].split(":")[0] if lines else None,
         strength=min(0.4 + count * 0.05, 0.9),
     )
 
@@ -80,9 +99,10 @@ def caller_evidence(repo_path: str, symbol: str) -> Evidence | None:
     if not output:
         return None
     lines = [ln for ln in output.splitlines() if ln.strip()]
+    snippets = _format_snippets(lines)
     return Evidence(
         type=EvidenceType.repo_context,
-        summary=f"Found {len(lines)} reference(s) to '{symbol}' in the repository.",
+        summary=f"Found {len(lines)} reference(s) to '{symbol}' in the repository: {snippets}",
         source_ref=lines[0].split(":")[0] if lines else None,
         strength=min(0.4 + len(lines) * 0.05, 0.85),
     )

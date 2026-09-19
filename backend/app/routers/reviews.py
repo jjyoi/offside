@@ -104,9 +104,10 @@ async def continue_push(session_id: str) -> dict:
     if session is None:
         raise HTTPException(status_code=404, detail="review session not found")
 
-    from app.models import Severity
+    from app.models import AppealOutcome, Severity
 
-    has_red = any(f.severity == Severity.red for f in session.findings)
+    overturned_ids = {a.finding_id for a in session.appeals if a.outcome == AppealOutcome.overturned}
+    has_red = any(f.severity == Severity.red and f.id not in overturned_ids for f in session.findings)
     if has_red:
         await store.update(session_id, status=ReviewStatus.blocked)
         await store.emit(session_id, "review.blocked", {"hpAfter": session.hp_after})

@@ -5,7 +5,7 @@ export function CoachRunning() {
     return (
       <div className="coach-running">
         <img src={COACH_RUNNING_GIF} alt="Coach running onto the pitch" className="coach-gif" />
-        <div className="coach-caption">Investigating your claim...</div>
+        <div className="coach-caption">Coach is on the pitch, checking your claim</div>
       </div>
     );
   }
@@ -23,7 +23,7 @@ export function CoachRunning() {
           />
         </svg>
       </div>
-      <div className="coach-caption">Coach is running onto the pitch... investigating your claim.</div>
+      <div className="coach-caption">Coach is on the pitch, checking your claim</div>
     </div>
   );
 }
