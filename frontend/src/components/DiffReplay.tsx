@@ -9,7 +9,7 @@ interface Props {
   skip?: boolean;
 }
 
-function extractHunkLines(diff: string, file: string): string[] {
+function extractHunkLines(diff: string, file: string, startLine: number, endLine: number): string[] {
   const lines = diff.split("\n");
   const out: string[] = [];
   let inFile = false;
@@ -22,18 +22,21 @@ function extractHunkLines(diff: string, file: string): string[] {
     }
     if (!inFile) continue;
     if (line.startsWith("@@")) {
-      inHunk = true;
+      const match = line.match(/\+(\d+)(?:,(\d+))? @@/);
+      const hunkStart = Number(match?.[1]);
+      const hunkEnd = hunkStart + Math.max(1, Number(match?.[2] ?? 1)) - 1;
+      inHunk = Boolean(match) && hunkStart <= endLine && hunkEnd >= startLine;
       continue;
     }
     if (inHunk && (line.startsWith("+") || line.startsWith("-")) && !line.startsWith("+++") && !line.startsWith("---")) {
       out.push(line);
     }
   }
-  return out.length ? out : diff.split("\n").filter((l) => l.startsWith("+") || l.startsWith("-")).slice(0, 8);
+  return out;
 }
 
-export function DiffReplay({ file, diff, onDone, skip }: Props) {
-  const lines = extractHunkLines(diff, file);
+export function DiffReplay({ file, startLine, endLine, diff, onDone, skip }: Props) {
+  const lines = extractHunkLines(diff, file, startLine, endLine);
   const totalCharacters = lines.reduce((total, line) => total + line.length + 1, 0);
   const [visibleCharacters, setVisibleCharacters] = useState(skip ? totalCharacters : 0);
   const onDoneRef = useRef(onDone);

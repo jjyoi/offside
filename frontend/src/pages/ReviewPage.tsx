@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useParams } from "react-router-dom";
 import { useReviewSession } from "../hooks/useReviewSession";
 import { VarIntro } from "../components/VarIntro";
@@ -9,12 +9,21 @@ import { submitAppeal, continuePush } from "../lib/api";
 
 export function ReviewPage() {
   const { sessionId = "" } = useParams();
+  return <ReviewSessionPage key={sessionId} sessionId={sessionId} />;
+}
+
+function ReviewSessionPage({ sessionId }: { sessionId: string }) {
   const { session, error } = useReviewSession(sessionId);
   const [introDone, setIntroDone] = useState(false);
   const [skip, setSkip] = useState(false);
   const [pendingAppealFindingId, setPendingAppealFindingId] = useState<string | null>(null);
   const [submittedAppealFindingIds, setSubmittedAppealFindingIds] = useState<Set<string>>(new Set());
   const [continuing, setContinuing] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
+  const handleVerdict = useCallback((id: string) => {
+    setRevealedIds((previous) => previous.has(id) ? previous : new Set(previous).add(id));
+  }, []);
 
   if (error) {
     return (
@@ -48,7 +57,7 @@ export function ReviewPage() {
     setPendingAppealFindingId(findingId);
     try {
       await submitAppeal(sessionId, findingId, text);
-    } catch (e) {
+    } catch {
       // Submission failed before the backend accepted it — allow retrying.
       setSubmittedAppealFindingIds((prev) => {
         const next = new Set(prev);
@@ -75,6 +84,13 @@ export function ReviewPage() {
     (f) => f.severity === "red" && !session.appeals.some((a) => a.finding_id === f.id && a.outcome === "overturned"),
   );
 
+  const currentFinding = session.findings[activeIndex];
+  const displayedHp = Math.max(0, session.hp_before + session.findings.reduce((total, finding) => {
+    const overturned = session.appeals.some((appeal) => appeal.finding_id === finding.id && appeal.outcome === "overturned");
+    return total + (revealedIds.has(finding.id) && !overturned ? finding.hp_delta : 0);
+  }, 0));
+  const allRevealed = session.findings.every((finding) => revealedIds.has(finding.id));
+
   return (
     <div className="review-page">
       <header className="scoreboard">
@@ -86,16 +102,16 @@ export function ReviewPage() {
           <span className="fixture-vs">v</span>
           <span className="team" title={session.branch}>{session.branch}</span>
         </div>
-        <HpBar hpBefore={session.hp_before} hpAfter={session.hp_after} />
+        <HpBar hpBefore={session.hp_before} hpAfter={displayedHp} />
       </header>
 
       {showIntro ? (
         <VarIntro onDone={() => setIntroDone(true)} skip={skip} />
       ) : (
         <>
-          {!skip && !isTerminal && (
+          {!skip && !isTerminal && currentFinding && !revealedIds.has(currentFinding.id) && (
             <button className="btn btn-skip" onClick={() => setSkip(true)}>
-              Skip animation / Show result
+              Skip this animation
             </button>
           )}
 
@@ -114,15 +130,16 @@ export function ReviewPage() {
           )}
 
           <div className="findings-list">
-            {session.findings.map((finding, index) => {
+            {session.findings.slice(activeIndex, activeIndex + 1).map((finding) => {
               const appeal = session.appeals.find((a) => a.finding_id === finding.id);
               return (
                 <FindingReview
                   key={finding.id}
                   finding={finding}
-                  index={index}
+                  index={activeIndex}
                   diff={session.diff}
-                  skip={skip}
+                  skip={skip || revealedIds.has(finding.id)}
+                  onVerdict={handleVerdict}
                   appeal={appeal}
                   appealPending={pendingAppealFindingId === finding.id}
                   appealSubmitted={submittedAppealFindingIds.has(finding.id)}
@@ -132,7 +149,20 @@ export function ReviewPage() {
             })}
           </div>
 
-          {!isReviewing && !isTerminal && !hasUnresolvedRed && (
+          {currentFinding && (
+            <nav className="finding-navigation" aria-label="Review findings">
+              <button className="btn" disabled={activeIndex === 0} onClick={() => { setSkip(false); setActiveIndex((index) => index - 1); }}>
+                Previous issue
+              </button>
+              <span>Issue {activeIndex + 1} of {session.findings.length}</span>
+              <button className="btn" disabled={!revealedIds.has(currentFinding.id) || activeIndex >= session.findings.length - 1}
+                onClick={() => { setSkip(false); setActiveIndex((index) => index + 1); }}>
+                Next issue
+              </button>
+            </nav>
+          )}
+
+          {!isReviewing && !isTerminal && !hasUnresolvedRed && allRevealed && (
             <div className="continue-bar">
               <button className="btn btn-continue" onClick={handleContinue} disabled={continuing}>
                 {continuing ? "Continuing..." : "Continue Push"}

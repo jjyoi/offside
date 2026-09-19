@@ -17,6 +17,7 @@ interface Props {
   appeal?: Appeal;
   appealPending: boolean;
   appealSubmitted: boolean;
+  onVerdict: (findingId: string) => void;
   onContest: (findingId: string, text: string) => void;
 }
 
@@ -28,7 +29,7 @@ const fadeUp = {
   transition: { duration: 0.35, ease: "easeOut" as const },
 };
 
-export function FindingReview({ finding, index, diff, skip, appeal, appealPending, appealSubmitted, onContest }: Props) {
+export function FindingReview({ finding, index, diff, skip, appeal, appealPending, appealSubmitted, onContest, onVerdict }: Props) {
   const [stageIndex, setStageIndex] = useState(skip ? STAGE_ORDER.length - 1 : 0);
   const stage = STAGE_ORDER[stageIndex];
 
@@ -41,10 +42,14 @@ export function FindingReview({ finding, index, diff, skip, appeal, appealPendin
   const advance = () => setStageIndex((i) => Math.min(i + 1, STAGE_ORDER.length - 1));
 
   useEffect(() => {
-    if (stage === "diff" || skip) return;
+    if (stage === "diff" || stage === "verdict" || skip) return;
     const timer = setTimeout(advance, stage === "explanation" ? 700 : stage === "evidence" ? 700 : 500);
     return () => clearTimeout(timer);
   }, [stage, skip]);
+
+  useEffect(() => {
+    if (stage === "verdict") onVerdict(finding.id);
+  }, [stage, finding.id, onVerdict]);
 
   const overturned = appeal?.outcome === "overturned";
 
@@ -101,7 +106,7 @@ export function FindingReview({ finding, index, diff, skip, appeal, appealPendin
           transition={{ duration: 0.3 }}
         >
           <div className="card-decision">
-            <CardBadge severity={overturned ? "play_on" : finding.severity} />
+            <CardBadge severity={overturned ? "play_on" : finding.severity} muted={skip} />
             {!overturned && finding.hp_delta !== 0 && <div className="hp-delta-tag">{finding.hp_delta} HP</div>}
           </div>
 

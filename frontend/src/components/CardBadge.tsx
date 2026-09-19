@@ -19,7 +19,7 @@ const SLAP_DURATION_MS = 3000;
 
 export function CardBadge({ severity, muted }: { severity: Severity; muted?: boolean }) {
   const played = useRef(false);
-  const [slapping, setSlapping] = useState(severity !== "play_on");
+  const [slapping, setSlapping] = useState(!muted && severity !== "play_on");
 
   useEffect(() => {
     if (played.current || muted) return;
@@ -85,7 +85,7 @@ export function CardBadge({ severity, muted }: { severity: Severity; muted?: boo
         className="card-label"
         initial={{ opacity: 0, x: -6 }}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ delay: severity === "play_on" ? 0.12 : SLAP_DURATION_MS / 1000, duration: 0.25 }}
+        transition={{ delay: muted ? 0 : severity === "play_on" ? 0.12 : SLAP_DURATION_MS / 1000, duration: 0.25 }}
       >
         {LABELS[severity]}
       </motion.span>
