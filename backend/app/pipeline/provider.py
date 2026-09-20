@@ -171,6 +171,34 @@ _FIXES = {
     "AbortSignal": "Keep the AbortSignal wired through so the request can be cancelled.",
 }
 
+# How each level judges the rule-based patterns. A pattern maps to (severity, confidence) or to
+# None to let it go. Missing patterns use the default in _RISK_PATTERNS (the mid-level bar).
+#
+# Intern: a gentler bar. Nitpicks pass, and only egregious things (eval/exec/DROP TABLE) stay red.
+# Staff: a stricter bar aimed at design. Implementation trivia (TODOs, debug logs) passes, swallowed
+# errors and secrets in code are treated as costly decisions (red), and missing guards stay yellow
+# but cost more HP.
+_LEVEL_OVERRIDES: dict[str, dict[str, tuple[str, float] | None]] = {
+    "intern": {
+        "TODO": None,
+        "console.log": None,
+        "except Exception:": None,
+        "except:": ("yellow", 0.4),
+        "password": ("yellow", 0.4),
+        "timeout": ("yellow", 0.45),
+        "AbortSignal": ("yellow", 0.45),
+    },
+    "staff": {
+        "TODO": None,
+        "console.log": None,
+        "except:": ("red", 0.75),
+        "except Exception:": ("yellow", 0.6),
+        "password": ("red", 0.8),
+        "timeout": ("yellow", 0.9),
+        "AbortSignal": ("yellow", 0.9),
+    },
+}
+
 _LEVEL_RE = re.compile(r"^EXPLANATION LEVEL:\s*(\w+)", re.MULTILINE)
 
 # Extra teaching sentences for the intern level, keyed by finding category.
@@ -217,7 +245,15 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
     # issue (e.g. drop a timeout while adding an eval()), and the worse one must win.
     best: RefereeVerdict | None = None
 
+    overrides = _LEVEL_OVERRIDES.get(level, {})
+
     for pattern, category, severity, confidence, needs_investigation in _RISK_PATTERNS:
+        if pattern in overrides:
+            override = overrides[pattern]
+            if override is None:
+                continue
+            severity, confidence = override
+
         if pattern in added_text:
             candidate = RefereeVerdict(
                 offence=True,
@@ -242,8 +278,8 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
             candidate = RefereeVerdict(
                 offence=True,
                 category="reliability",
-                severity="yellow",
-                confidence=0.55,
+                severity=severity if pattern in overrides else "yellow",
+                confidence=confidence if pattern in overrides else 0.55,
                 explanation=_at_level(
                     level,
                     "reliability",
@@ -257,6 +293,19 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
             )
             if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
                 best = candidate
+
+    if level == "staff" and re.search(r"^\+\s*global\s+\w+", added_text, re.MULTILINE):
+        candidate = RefereeVerdict(
+            offence=True,
+            category="design",
+            severity="yellow",
+            confidence=0.6,
+            explanation="Design: shared mutable state via `global`.",
+            suggested_fix="Pass the state in explicitly or wrap it in an object with a clear owner.",
+            roast="Global state: because every codebase needs a haunted room.",
+        )
+        if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
+            best = candidate
 
     if best is not None:
         return best

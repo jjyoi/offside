@@ -283,9 +283,28 @@ _LEVEL_INSTRUCTIONS = {
 }
 
 
+_LEVEL_STANDARDS = {
+    ExplanationLevel.intern: (
+        "Review gently, as a mentor would for someone learning. Ignore style, naming, TODOs, debug logging and "
+        "other minor smells. Flag only real correctness or security problems, and reserve red for egregious "
+        "ones (security holes, data loss, code that will clearly break). When unsure, prefer play_on."
+    ),
+    ExplanationLevel.mid: (
+        "Review at a normal professional bar: real bugs, security issues, missing guards and clear carelessness."
+    ),
+    ExplanationLevel.staff: (
+        "Hold a high bar and review the design, not the implementation trivia. Look at abstractions and "
+        "boundaries, error-handling strategy, coupling, API shape, failure modes, testability and security "
+        "posture. Ignore naming, formatting, TODOs and debug logging. Use red for design decisions that will "
+        "be costly to undo."
+    ),
+}
+
+
 def level_instruction(level: ExplanationLevel) -> str:
     """Appended to each system prompt so `explanation` is written at the reader's depth."""
     return (
+        f"\n\nREVIEW STANDARD: {_LEVEL_STANDARDS[level]}"
         f"\n\nEXPLANATION DEPTH: {_LEVEL_INSTRUCTIONS[level]}"
         "\n\nSUGGESTED FIX: Put a concrete fix in `suggested_fix`: one to three sentences, with a short code "
         "snippet if it helps. Leave it empty only when the verdict is play_on."
