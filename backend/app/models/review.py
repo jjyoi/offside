@@ -23,6 +23,9 @@ class ExplanationLevel(str, Enum):
     intern = "intern"
     mid = "mid"
     staff = "staff"
+    messi = "messi"
+    ronaldo = "ronaldo"
+    son = "son"
 
 
 class Severity(str, Enum):

@@ -63,6 +63,9 @@ LEVEL_CHOICES = {
     "1": ("intern", "gentler review, full walkthroughs; only serious problems get red cards"),
     "2": ("mid", "balanced review, explains what's wrong and why it matters"),
     "3": ("staff", "strict, design-focused review, one terse line per finding"),
+    "4": ("messi", "balanced review, written in Spanish"),
+    "5": ("ronaldo", "balanced review, written in Portuguese"),
+    "6": ("son", "balanced review, written in Korean"),
 }
 
 
@@ -74,7 +77,7 @@ def prompt_for_level(input_fn=None) -> str:
         print(f"  {key}) {name}: {blurb}")
     default = prefs.DEFAULTS["level"]
     try:
-        answer = input_fn(f"Choose 1-3 [{default}]: ").strip().lower()
+        answer = input_fn(f"Choose 1-6 [{default}]: ").strip().lower()
     except EOFError:
         return default
     if answer in LEVEL_CHOICES:
@@ -103,7 +106,7 @@ def cmd_install(shared: bool = False) -> None:
     if not prefs.is_set("level") and sys.stdin.isatty():
         level = prompt_for_level()
         prefs.set_value("level", level)
-        print(f"Explanation level set to {level}. Change it any time with `offside config level <intern|mid|staff>`.")
+        print(f"Explanation level set to {level}. Change it any time with `offside config level <intern|mid|staff|messi|ronaldo|son>`.")
 
 
 def cmd_connect(shared: bool = False) -> int:
@@ -229,7 +232,7 @@ def cmd_pre_push() -> None:
         sys.exit(0)
 
     if not prefs.is_set("level"):
-        print("Offside: explanation level is mid. Change it with `offside config level <intern|mid|staff>`.")
+        print("Offside: explanation level is mid. Change it with `offside config level <intern|mid|staff|messi|ronaldo|son>`.")
 
     backend_ok, frontend_ok = check_services()
     if not (backend_ok and frontend_ok):

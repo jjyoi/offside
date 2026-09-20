@@ -373,6 +373,22 @@ _LEVEL_INSTRUCTIONS = {
         "The reader is a staff engineer. Make `explanation` a single terse sentence naming the issue. No "
         "background, no advice."
     ),
+    ExplanationLevel.messi: (
+        "Write `explanation`, `roast`, and `suggested_fix` entirely in Spanish (Rioplatense/Argentine Spanish), "
+        "as if Lionel Messi were the one reviewing the code: calm, humble, matter-of-fact, but exacting. 1-2 "
+        "sentences for `explanation`, same as a normal mid-level review, just in Spanish."
+    ),
+    ExplanationLevel.ronaldo: (
+        "Write `explanation`, `roast`, and `suggested_fix` entirely in Portuguese (European Portuguese, as spoken "
+        "in Portugal), as if Cristiano Ronaldo were the one reviewing the code: confident, intense, a little "
+        "boastful about the fix being obvious. 1-2 sentences for `explanation`, same as a normal mid-level "
+        "review, just in Portuguese."
+    ),
+    ExplanationLevel.son: (
+        "Write `explanation`, `roast`, and `suggested_fix` entirely in Korean (한국어), as if Son Heung-min were "
+        "the one reviewing the code: polite, encouraging, hard-working in tone. 1-2 sentences for `explanation`, "
+        "same as a normal mid-level review, just in Korean."
+    ),
 }
 
 
@@ -391,6 +407,9 @@ _LEVEL_STANDARDS = {
         "posture. Ignore naming, formatting, TODOs and debug logging. Use red for design decisions that will "
         "be costly to undo."
     ),
+    ExplanationLevel.messi: "Review at a normal professional bar: real bugs, security issues, missing guards and clear carelessness.",
+    ExplanationLevel.ronaldo: "Review at a normal professional bar: real bugs, security issues, missing guards and clear carelessness.",
+    ExplanationLevel.son: "Review at a normal professional bar: real bugs, security issues, missing guards and clear carelessness.",
 }
 
 

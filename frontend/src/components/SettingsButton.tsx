@@ -6,6 +6,9 @@ const OPTIONS: { value: ExplanationLevel; label: string; blurb: string }[] = [
   { value: "intern", label: "Intern", blurb: "Gentler review, full walkthroughs. Only serious problems get red cards." },
   { value: "mid", label: "Mid-level", blurb: "Balanced review. Explains what's wrong and why it matters." },
   { value: "staff", label: "Staff", blurb: "Strict, design-focused review. One terse line per finding." },
+  { value: "messi", label: "Messi", blurb: "Balanced review, written in Spanish." },
+  { value: "ronaldo", label: "Ronaldo", blurb: "Balanced review, written in Portuguese." },
+  { value: "son", label: "Son", blurb: "Balanced review, written in Korean." },
 ];
 
 export function SettingsButton({ align = "right" }: { align?: "right" | "center" }) {

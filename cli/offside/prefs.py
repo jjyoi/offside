@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-LEVELS = ("intern", "mid", "staff")
+LEVELS = ("intern", "mid", "staff", "messi", "ronaldo", "son")
 DEFAULTS: dict[str, str] = {"level": "mid"}
 
 

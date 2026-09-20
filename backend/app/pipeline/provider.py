@@ -215,6 +215,8 @@ _INTERN_DEFAULT_NOTE = "Take a moment to check the surrounding code and confirm 
 def _level_from_prompt(prompt: str) -> str:
     match = _LEVEL_RE.search(prompt)
     level = match.group(1).lower() if match else "mid"
+    # messi/ronaldo/son only change tone and language, which this deterministic rule-based
+    # fallback (no LLM, no translation) can't produce — review at the normal "mid" bar instead.
     return level if level in {"intern", "mid", "staff"} else "mid"
 
 

@@ -5,7 +5,7 @@ export type ReviewStatus =
   | "approved"
   | "blocked";
 
-export type ExplanationLevel = "intern" | "mid" | "staff";
+export type ExplanationLevel = "intern" | "mid" | "staff" | "messi" | "ronaldo" | "son";
 
 export type FixDecision = "accepted" | "declined";
 
