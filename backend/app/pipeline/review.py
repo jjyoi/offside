@@ -25,6 +25,40 @@ def hp_delta_for(severity: Severity, confidence: float) -> int:
     return -round(lo + (hi - lo) * confidence)
 
 
+def appeal_penalty_for(hp_delta: int, confidence: float) -> int:
+    """HP lost on top of the card when a contest fails. The surer the ref was, the harder the fall,
+    so challenging a confident call is a real bet: win it back, or pay for it."""
+    if hp_delta == 0:
+        return 0
+    return max(1, round(abs(hp_delta) * 1.5 * confidence))
+
+
+def fix_refund_for(hp_delta: int) -> int:
+    """Taking the ref's advice earns half the card's HP back.
+
+    Contest outcomes are kept strictly ordered around this: a won contest returns the whole card
+    (at least as much as accepting), and a lost one costs the card plus a penalty (always less
+    than accepting)."""
+    return abs(hp_delta) // 2
+
+
+def compute_hp(hp_before: int, findings: list[Finding], appeals: list) -> int:
+    from app.models import AppealOutcome, FixDecision
+
+    overturned = {a.finding_id for a in appeals if a.outcome == AppealOutcome.overturned}
+    hp = hp_before
+    for f in findings:
+        if f.id in overturned:
+            continue
+        hp += f.hp_delta
+        if f.fix_decision == FixDecision.accepted:
+            hp += fix_refund_for(f.hp_delta)
+    hp += sum(a.hp_penalty for a in appeals)
+    # No floor: HP can go negative. That keeps every choice strictly ordered even deep in the red
+    # (win a contest > accept the fix > lose a contest), which a clamp at 0 would flatten.
+    return min(hp, 100)
+
+
 async def run_review(session_id: str, repo_path: str | None) -> None:
     """Full first-pass pipeline: deterministic checks -> fast referee -> investigation -> verdict."""
     session = store.get(session_id)
@@ -81,7 +115,9 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
                 "check.completed",
                 {"check": "deep_review", "file": hunk.file, "model": deep_result.model_name, "latency_ms": round(deep_result.latency_ms, 1)},
             )
+            fast_fix = verdict.suggested_fix
             verdict = deep_result.verdict if deep_result.verdict.offence else verdict
+            verdict.suggested_fix = verdict.suggested_fix or fast_fix
 
         if verdict.severity == "play_on":
             continue
@@ -95,8 +131,10 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
             severity=severity,
             confidence=verdict.confidence,
             explanation=verdict.explanation,
+            suggested_fix=verdict.suggested_fix,
             roast=verdict.roast,
             hp_delta=hp_delta_for(severity, verdict.confidence),
+            appeal_penalty=appeal_penalty_for(hp_delta_for(severity, verdict.confidence), verdict.confidence),
             evidence=evidence,
         )
         findings.append(finding)
@@ -107,7 +145,6 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
         )
 
     hp_after = session.hp_before + sum(f.hp_delta for f in findings)
-    hp_after = max(hp_after, 0)
 
     await store.update(session_id, findings=findings, hp_after=hp_after)
     await store.emit(session_id, "verdict.ready", {"findingCount": len(findings), "hpAfter": hp_after})
@@ -194,6 +231,7 @@ async def run_appeal_investigation(session_id: str, finding_id: str, appeal_text
         claimed_hypothesis=hypothesis,
         second_pass_evidence=new_evidence,
         outcome=AppealOutcome(outcome),
+        hp_penalty=-finding.appeal_penalty if outcome == "stands" else 0,
     )
 
     appeals = [*session.appeals, appeal]
@@ -202,13 +240,18 @@ async def run_appeal_investigation(session_id: str, finding_id: str, appeal_text
     # finding + evidence to still be there to render the "DECISION OVERTURNED"
     # card. Only the HP/blocking effect of an overturned finding is nulled out.
     overturned_ids = {a.finding_id for a in appeals if a.outcome == AppealOutcome.overturned}
-    hp_after = session.hp_before + sum(f.hp_delta for f in session.findings if f.id not in overturned_ids)
-    hp_after = max(hp_after, 0)
+    hp_after = compute_hp(session.hp_before, session.findings, appeals)
 
     await store.update(session_id, appeals=appeals, hp_after=hp_after)
     await store.emit(session_id, "appeal.completed", {"findingId": finding_id, "outcome": outcome})
 
     session = store.get(session_id)
+    if outcome == "stands" and hp_after <= 0:
+        # The failed challenge was the death knell.
+        await store.update(session_id, status=ReviewStatus.blocked)
+        await store.emit(session_id, "review.blocked", {"hpAfter": hp_after, "knockedOut": True})
+        return
+
     unresolved = [f for f in session.findings if f.id not in overturned_ids]
     if unresolved:
         # Any remaining card (yellow or red, including this one if it stood) still
@@ -232,7 +275,7 @@ Don't wait for a specific keyword to trigger; form your own opinion on every hun
 
 Respond ONLY with compact JSON matching this schema: {"offence": bool, "category": str, \
 "severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, "start_line": int, "end_line": int, \
-"explanation": str, "roast": str, "needs_investigation": bool, "investigation_reason": str}. \
+"explanation": str, "suggested_fix": str, "roast": str, "needs_investigation": bool, "investigation_reason": str}. \
 Set needs_investigation=true when you suspect slop but can't confirm from the diff alone (e.g. need to check \
 callers, tests, or history to know if it's actually a problem). Be terse and specific — call out exactly what \
 about it reads as slop, not a generic warning."""
@@ -242,7 +285,7 @@ _DEEP_SYSTEM_PROMPT = """You are the deep-review judge. You receive a diff hunk 
 checks — the question is whether this is genuinely careless/slop code or just looked suspicious out of context. \
 Produce a final verdict as compact JSON matching: {"offence": bool, "category": str, \
 "severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, "start_line": int, "end_line": int, \
-"explanation": str, "roast": str, "needs_investigation": false, "investigation_reason": ""}. \
+"explanation": str, "suggested_fix": str, "roast": str, "needs_investigation": false, "investigation_reason": ""}. \
 The explanation must reference the evidence provided. Never invent evidence. Be willing to soften or clear a \
 verdict if the evidence explains it — you're not trying to maximize red cards, you're trying to be right."""
 
@@ -273,7 +316,7 @@ the hostile/authority framing still wins — overturn or downgrade.
 
 Respond ONLY with compact JSON matching: {"offence": bool, "category": str, \
 "severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, "start_line": int, "end_line": int, \
-"explanation": str, "roast": str, "needs_investigation": false, "investigation_reason": ""}. The explanation \
+"explanation": str, "suggested_fix": str, "roast": str, "needs_investigation": false, "investigation_reason": ""}. The explanation \
 must name what tone/tactic the developer used and why that's what decided the outcome."""
 
 
@@ -292,9 +335,32 @@ _LEVEL_INSTRUCTIONS = {
 }
 
 
+_LEVEL_STANDARDS = {
+    ExplanationLevel.intern: (
+        "Review gently, as a mentor would for someone learning. Ignore style, naming, TODOs, debug logging and "
+        "other minor smells. Flag only real correctness or security problems, and reserve red for egregious "
+        "ones (security holes, data loss, code that will clearly break). When unsure, prefer play_on."
+    ),
+    ExplanationLevel.mid: (
+        "Review at a normal professional bar: real bugs, security issues, missing guards and clear carelessness."
+    ),
+    ExplanationLevel.staff: (
+        "Hold a high bar and review the design, not the implementation trivia. Look at abstractions and "
+        "boundaries, error-handling strategy, coupling, API shape, failure modes, testability and security "
+        "posture. Ignore naming, formatting, TODOs and debug logging. Use red for design decisions that will "
+        "be costly to undo."
+    ),
+}
+
+
 def level_instruction(level: ExplanationLevel) -> str:
     """Appended to each system prompt so `explanation` is written at the reader's depth."""
-    return f"\n\nEXPLANATION DEPTH: {_LEVEL_INSTRUCTIONS[level]}"
+    return (
+        f"\n\nREVIEW STANDARD: {_LEVEL_STANDARDS[level]}"
+        f"\n\nEXPLANATION DEPTH: {_LEVEL_INSTRUCTIONS[level]}"
+        "\n\nSUGGESTED FIX: Put a concrete fix in `suggested_fix`: one to three sentences, with a short code "
+        "snippet if it helps. Leave it empty only when the verdict is play_on."
+    )
 
 
 def _build_fast_prompt(file: str, hunk_raw: str, level: ExplanationLevel = ExplanationLevel.mid) -> str:

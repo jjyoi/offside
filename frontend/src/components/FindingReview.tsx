@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Appeal, Finding } from "../lib/types";
+import type { Appeal, Finding, FixDecision } from "../lib/types";
 import { DiffReplay } from "./DiffReplay";
 import { CardBadge } from "./CardBadge";
 import { EvidenceList } from "./EvidenceList";
@@ -21,6 +21,7 @@ interface Props {
   playerName?: string | null;
   onVerdict: (findingId: string) => void;
   onContest: (findingId: string, text: string) => void;
+  onFixDecision: (findingId: string, decision: FixDecision) => void;
 }
 
 const STAGE_ORDER: Stage[] = ["diff", "explanation", "evidence", "roast", "verdict"];
@@ -48,6 +49,7 @@ export function FindingReview({
   reviewFinished,
   playerName,
   onContest,
+  onFixDecision,
   onVerdict,
 }: Props) {
   const [resolvedOnMount] = useState(Boolean(receivedAppeal?.outcome));
@@ -170,18 +172,25 @@ export function FindingReview({
             {!overturned && finding.hp_delta !== 0 && <div className="hp-delta-tag">{finding.hp_delta} HP</div>}
           </div>
 
+          {finding.severity !== "play_on" && (
+            <p className="confidence-line">
+              The ref is <strong>{Math.round(finding.confidence * 100)}% sure</strong> about this call.
+            </p>
+          )}
+
           {overturned && appeal && (
             <div className="appeal-result appeal-overturned">
               <span className="eyebrow">Decision overturned</span>
               <p>{appeal.text}</p>
               <EvidenceList evidence={appeal.second_pass_evidence} />
-              <p className="appeal-restored">HP restored.</p>
+              <p className="appeal-restored">+{Math.abs(finding.hp_delta)} HP restored.</p>
             </div>
           )}
 
           {appeal && appeal.outcome === "stands" && (
             <div className="appeal-result appeal-stands">
               <span className="eyebrow">Decision stands</span>
+              {!!appeal.hp_penalty && <p className="appeal-penalty">{appeal.hp_penalty} HP for the failed challenge.</p>}
               {appeal.second_pass_evidence.length > 0 ? (
                 <>
                   <p className="appeal-note">New evidence gathered:</p>
@@ -195,8 +204,38 @@ export function FindingReview({
             </div>
           )}
 
-          {finding.severity !== "play_on" && !reviewFinished && !appeal && !appealSubmitted && (
-            <AppealForm onSubmit={(text) => onContest(finding.id, text)} disabled={appealPending} />
+          {finding.severity !== "play_on" && !overturned && finding.suggested_fix && (
+            <div className="suggested-fix">
+              <span className="eyebrow">Suggested fix</span>
+              <p>{finding.suggested_fix}</p>
+              {finding.fix_decision === "accepted" && (
+                <p className="fix-status fix-status-accepted">
+                  Fix accepted, +{Math.floor(Math.abs(finding.hp_delta) / 2)} HP back. It isn't part of this push, so
+                  apply it next. The terminal will list it.
+                </p>
+              )}
+              {finding.fix_decision === "declined" && (
+                <p className="fix-status fix-status-declined">Conceded with no fix agreed. The push is stopped.</p>
+              )}
+              {!finding.fix_decision && !reviewFinished && (
+                <div className="fix-actions">
+                  <button type="button" className="btn btn-continue" onClick={() => onFixDecision(finding.id, "accepted")}>
+                    Accept fix (+{Math.floor(Math.abs(finding.hp_delta) / 2)} HP)
+                  </button>
+                  <button type="button" className="btn" onClick={() => onFixDecision(finding.id, "declined")}>
+                    Concede, no fix (stops push)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {finding.severity !== "play_on" && !reviewFinished && !appeal && !appealSubmitted && !finding.fix_decision && (
+            <AppealForm
+              onSubmit={(text) => onContest(finding.id, text)}
+              disabled={appealPending}
+              stakes={{ win: Math.abs(finding.hp_delta), lose: finding.appeal_penalty }}
+            />
           )}
 
           {appealSubmitted && !appeal && <AppealWaiting onDone={() => setWaitingDone(true)} />}

@@ -6,8 +6,8 @@ import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.models import ExplanationLevel, ReviewSession, ReviewStatus
-from app.pipeline.review import run_appeal_investigation, run_review
+from app.models import ExplanationLevel, FixDecision, ReviewSession, ReviewStatus
+from app.pipeline.review import compute_hp, run_appeal_investigation, run_review
 from app.store import store
 
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
@@ -35,6 +35,10 @@ class CreateReviewResponse(BaseModel):
 class AppealRequest(BaseModel):
     finding_id: str
     text: str
+
+
+class FixDecisionRequest(BaseModel):
+    decision: FixDecision
 
 
 _repo_paths: dict[str, str | None] = {}
@@ -119,7 +123,15 @@ async def continue_push(session_id: str) -> dict:
     from app.models import AppealOutcome, Severity
 
     overturned_ids = {a.finding_id for a in session.appeals if a.outcome == AppealOutcome.overturned}
-    has_red = any(f.severity == Severity.red and f.id not in overturned_ids for f in session.findings)
+    has_red = any(
+        f.severity == Severity.red and f.id not in overturned_ids and f.fix_decision != FixDecision.accepted
+        for f in session.findings
+    )
+    if any(f.fix_decision == FixDecision.declined for f in session.findings):
+        has_red = True
+    if session.hp_after <= 0:
+        # Knocked out: no HP left means no push, whatever the cards say.
+        has_red = True
     if has_red:
         await store.update(session_id, status=ReviewStatus.blocked)
         await store.emit(session_id, "review.blocked", {"hpAfter": session.hp_after})
@@ -154,3 +166,32 @@ async def submit_appeal(session_id: str, req: AppealRequest) -> dict:
 
     asyncio.create_task(investigate())
     return {"status": "appeal_started"}
+
+
+@router.post("/{session_id}/findings/{finding_id}/fix")
+async def decide_fix(session_id: str, finding_id: str, req: FixDecisionRequest) -> dict:
+    """Developer's answer to a suggested fix. Accepting lets the push continue (a red card
+    no longer blocks it). Conceding without agreeing on a fix stops the push."""
+    session = store.get(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="review session not found")
+    finding = next((f for f in session.findings if f.id == finding_id), None)
+    if finding is None:
+        raise HTTPException(status_code=404, detail="finding not found")
+    if session.status in (ReviewStatus.approved, ReviewStatus.blocked):
+        raise HTTPException(status_code=409, detail="review already finished")
+
+    findings = [
+        f.model_copy(update={"fix_decision": req.decision}) if f.id == finding_id else f for f in session.findings
+    ]
+    hp_after = compute_hp(session.hp_before, findings, session.appeals)
+    await store.update(session_id, findings=findings, hp_after=hp_after)
+    await store.emit(
+        session_id, "fix.decided", {"findingId": finding_id, "decision": req.decision.value, "hpAfter": hp_after}
+    )
+
+    if req.decision == FixDecision.declined:
+        await store.update(session_id, status=ReviewStatus.blocked)
+        await store.emit(session_id, "review.blocked", {"hpAfter": session.hp_after})
+        return {"status": "blocked"}
+    return {"status": session.status.value}

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import type { FixDecision } from "../lib/types";
 import { useParams } from "react-router-dom";
 import { useReviewSession } from "../hooks/useReviewSession";
 import { VarIntro } from "../components/VarIntro";
@@ -8,7 +9,7 @@ import { HpBar } from "../components/HpBar";
 import { BookingsTracker } from "../components/BookingsTracker";
 import { FindingsOverview } from "../components/FindingsOverview";
 import { SettingsButton } from "../components/SettingsButton";
-import { submitAppeal, continuePush } from "../lib/api";
+import { submitAppeal, continuePush, decideFix } from "../lib/api";
 
 export function ReviewPage() {
   const { sessionId = "" } = useParams();
@@ -74,6 +75,14 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
     }
   };
 
+  const handleFixDecision = async (findingId: string, decision: FixDecision) => {
+    try {
+      await decideFix(sessionId, findingId, decision);
+    } catch {
+      // The session refetches on events; a failed call just leaves the buttons available to retry.
+    }
+  };
+
   const handleContinue = async () => {
     setContinuing(true);
     setCompletionError(null);
@@ -94,16 +103,22 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
     (id) => !session.appeals.some((appeal) => appeal.finding_id === id && appeal.outcome),
   );
   const hasUnresolvedRed = session.findings.some(
-    (f) => f.severity === "red" && !session.appeals.some((a) => a.finding_id === f.id && a.outcome === "overturned"),
+    (f) =>
+      f.severity === "red" &&
+      f.fix_decision !== "accepted" &&
+      !session.appeals.some((a) => a.finding_id === f.id && a.outcome === "overturned"),
   );
 
   const currentFinding = session.findings[activeIndex];
-  const displayedHp = Math.max(0, session.hp_before + session.findings.reduce((total, finding) => {
+  const displayedHp = Math.min(100, session.hp_before + session.findings.reduce((total, finding) => {
     const overturned = session.appeals.some((appeal) => appeal.finding_id === finding.id && appeal.outcome === "overturned");
-    return total + (revealedIds.has(finding.id) && !overturned ? finding.hp_delta : 0);
-  }, 0));
+    if (!revealedIds.has(finding.id) || overturned) return total;
+    const refund = finding.fix_decision === "accepted" ? Math.floor(Math.abs(finding.hp_delta) / 2) : 0;
+    return total + finding.hp_delta + refund;
+  }, 0) + session.appeals.reduce((total, appeal) => total + (revealedIds.has(appeal.finding_id) ? appeal.hp_penalty ?? 0 : 0), 0));
   const isLast = activeIndex >= session.findings.length - 1;
   const currentRevealed = currentFinding ? revealedIds.has(currentFinding.id) : false;
+  const pushBlocked = hasUnresolvedRed || displayedHp <= 0;
   const allRevealed = session.findings.every((finding) => revealedIds.has(finding.id));
   const playerName = session.author || "YOU";
 
@@ -176,6 +191,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                   reviewFinished={isTerminal || continuing}
                   playerName={playerName}
                   onContest={handleContest}
+                  onFixDecision={handleFixDecision}
                 />
               );
             })}
@@ -200,11 +216,13 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
 
           {!isReviewing && !isTerminal && allRevealed && (
             <div className="continue-bar">
-              {hasUnresolvedRed && (
-                <p className="continue-note">A red card stops the push. Contest it above, or accept the call.</p>
-              )}
-              <button className={`btn ${hasUnresolvedRed ? "btn-block" : "btn-continue"}`} onClick={handleContinue} disabled={continuing || appealInProgress}>
-                {continuing ? "Finishing review..." : appealInProgress ? "Waiting for appeal..." : hasUnresolvedRed ? "Accept verdict / Block push" : "Continue Push"}
+              {displayedHp <= 0 ? (
+                <p className="continue-note">Out of HP. With none left the push is blocked, unless you win a contest.</p>
+              ) : hasUnresolvedRed ? (
+                <p className="continue-note">A red card stops the push. Contest it, accept its fix, or concede.</p>
+              ) : null}
+              <button className={`btn ${pushBlocked ? "btn-block" : "btn-continue"}`} onClick={handleContinue} disabled={continuing || appealInProgress}>
+                {continuing ? "Finishing review..." : appealInProgress ? "Waiting for appeal..." : pushBlocked ? "Accept verdict / Block push" : "Continue Push"}
               </button>
             </div>
           )}

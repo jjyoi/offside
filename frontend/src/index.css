@@ -1360,7 +1360,7 @@ a {
 .continue-note {
   margin: 0 0 0.5rem;
   font-size: 0.8rem;
-  color: var(--ink-dim);
+  color: #f1ead6;
   text-align: center;
 }
 
@@ -1425,4 +1425,78 @@ a {
   margin-left: auto;
   font-size: 0.7rem;
   color: var(--ink-faint);
+}
+
+/* ---------- suggested fix ---------- */
+
+.suggested-fix {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: rgba(10, 11, 13, 0.04);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+.suggested-fix p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.fix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.fix-status {
+  font-weight: 600;
+}
+
+.fix-status-accepted {
+  color: var(--green);
+}
+
+.fix-status-declined {
+  color: var(--red);
+}
+
+/* ---------- contest stakes ---------- */
+
+.confidence-line {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+.contest-trigger {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.contest-stakes {
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+  color: var(--ink-dim);
+}
+
+.stake-win {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.stake-lose {
+  font-weight: 700;
+  color: var(--red);
+}
+
+.appeal-penalty {
+  margin: 0;
+  font-weight: 700;
+  color: var(--red);
 }
