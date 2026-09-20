@@ -13,6 +13,7 @@ function statusFor(finding: Finding, appeals: Appeal[], revealed: boolean): stri
   if (finding.fix_decision === "declined") return "Conceded";
   const appeal = appeals.find((a) => a.finding_id === finding.id);
   if (appeal?.outcome === "overturned") return "Overturned";
+  if (appeal?.outcome === "downgraded") return "Downgraded";
   if (appeal?.outcome === "stands") return "Stands";
   return revealed ? "Reviewed" : "Pending";
 }

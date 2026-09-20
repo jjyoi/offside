@@ -123,6 +123,56 @@ async def test_overturned_finding_stays_visible_and_stops_blocking(patched_store
     assert result.status == ReviewStatus.approved  # no longer blocks
 
 
+class _AlwaysDowngradeProvider:
+    """Stub provider that always talks a red card down to yellow (a partial win: the
+    ref keeps a real concern but drops the blocking severity), so we can test the
+    downgrade bookkeeping without depending on LLM judgment."""
+
+    name = "stub-downgrade"
+
+    async def complete(self, system, prompt):
+        from app.pipeline.provider import ModelResult, RefereeVerdict
+
+        verdict = RefereeVerdict(
+            offence=True, severity="yellow", confidence=0.6, explanation="partially justified", roast=""
+        )
+        return ModelResult(verdict=verdict, latency_ms=0.0, model_name=self.name, raw="{}")
+
+
+async def test_downgraded_red_becomes_yellow_with_no_penalty_and_stops_blocking(patched_store, monkeypatch):
+    """A red card talked down to yellow: the finding's own severity/hp_delta change to the
+    yellow-equivalent cost, no appeal penalty applies (it's a partial win, not a lost bet),
+    and the push is no longer blocked once no red findings remain."""
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=RED_DIFF)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+
+    before = patched_store.get(session.id)
+    finding = before.findings[0]
+    assert finding.severity == Severity.red
+    hp_with_red_card = before.hp_after
+
+    monkeypatch.setattr(review_module, "get_provider", lambda tier: _AlwaysDowngradeProvider())
+    await run_appeal_investigation(session.id, finding.id, "the caller partially handles this", repo_path=None)
+
+    result = patched_store.get(session.id)
+    appeal = result.appeals[-1]
+    assert appeal.outcome == "downgraded"
+    assert appeal.downgraded_severity == "yellow"
+    assert appeal.hp_penalty == 0  # no penalty for a partial win
+
+    downgraded = next(f for f in result.findings if f.id == finding.id)
+    assert downgraded.severity == Severity.yellow
+    assert downgraded.hp_delta != finding.hp_delta  # recomputed at yellow's (smaller) cost
+    assert downgraded.hp_delta > finding.hp_delta  # smaller HP loss than the original red
+
+    # HP recovers some ground versus staying red, but isn't fully restored like an overturn.
+    assert result.hp_after > hp_with_red_card
+    assert result.hp_after < result.hp_before
+
+    assert result.status == ReviewStatus.approved  # no red findings left, so nothing blocks
+
+
 @pytest.mark.parametrize("level,check", [
     ("staff", lambda t: len(t) < 60),
     ("mid", lambda t: "Detected potential" in t),

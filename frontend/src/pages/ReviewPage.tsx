@@ -9,6 +9,7 @@ import { HpBar } from "../components/HpBar";
 import { BookingsTracker } from "../components/BookingsTracker";
 import { FindingsOverview } from "../components/FindingsOverview";
 import { SettingsButton } from "../components/SettingsButton";
+import { DonePage } from "../components/DonePage";
 import { submitAppeal, continuePush, decideFix } from "../lib/api";
 
 export function ReviewPage() {
@@ -133,15 +134,20 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
           <span className="fixture-vs">v</span>
           <span className="team" title={session.branch}>{session.branch}</span>
         </div>
-        <HpBar hpBefore={session.hp_before} hpAfter={displayedHp} />
+        {!isTerminal && <HpBar hpBefore={session.hp_before} hpAfter={displayedHp} />}
         <SettingsButton />
       </header>
 
       {showIntro ? (
         <VarIntro onDone={() => setIntroDone(true)} skip={skip} />
+      ) : isTerminal ? (
+        // Use the backend's authoritative hp_after here, not the reveal-gated displayedHp:
+        // a done page can be the first thing rendered (e.g. reopening the review link after
+        // the fact), when revealedIds is still empty and would otherwise show a stale 100.
+        <DonePage session={session} hpAfter={session.hp_after} blocked={finalStatus === "blocked"} />
       ) : (
         <>
-          {!skip && !isTerminal && currentFinding && !revealedIds.has(currentFinding.id) && (
+          {!skip && currentFinding && !revealedIds.has(currentFinding.id) && (
             <button className="btn btn-skip" onClick={() => setSkip(true)}>
               Skip this animation
             </button>
@@ -188,7 +194,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                   appeal={appeal}
                   appealPending={pendingAppealFindingId === finding.id}
                   appealSubmitted={submittedAppealFindingIds.has(finding.id)}
-                  reviewFinished={isTerminal || continuing}
+                  reviewFinished={continuing}
                   playerName={playerName}
                   onContest={handleContest}
                   onFixDecision={handleFixDecision}
@@ -214,7 +220,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
             </nav>
           )}
 
-          {!isReviewing && !isTerminal && allRevealed && (
+          {!isReviewing && allRevealed && (
             <div className="continue-bar">
               {displayedHp <= 0 ? (
                 <p className="continue-note">Out of HP. With none left the push is blocked, unless you win a contest.</p>
@@ -227,14 +233,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
-          {completionError && !isTerminal && <div className="terminal-banner terminal-blocked" role="alert">{completionError}</div>}
-
-          {finalStatus === "approved" && (
-            <div className="terminal-banner terminal-approved">PUSH ALLOWED — the waiting `git push` will now continue.</div>
-          )}
-          {finalStatus === "blocked" && (
-            <div className="terminal-banner terminal-blocked">PUSH BLOCKED — the waiting `git push` has been stopped.</div>
-          )}
+          {completionError && <div className="terminal-banner terminal-blocked" role="alert">{completionError}</div>}
 
           <BookingsTracker
             findings={session.findings}

@@ -76,6 +76,7 @@ class Finding(BaseModel):
 
 class AppealOutcome(str, Enum):
     overturned = "overturned"
+    downgraded = "downgraded"
     stands = "stands"
 
 
@@ -89,6 +90,11 @@ class Appeal(BaseModel):
     second_pass_evidence: list[Evidence] = Field(default_factory=list)
 
     outcome: AppealOutcome | None = None
+    # Set only when outcome == downgraded: the card's new severity (always yellow today),
+    # plus the HP the finding was costing right before the downgrade, so the browser can
+    # show how much ground was recovered without needing to remember the original card.
+    downgraded_severity: Severity | None = None
+    hp_delta_before_downgrade: int | None = None
     hp_penalty: int = 0  # negative; HP lost for a failed challenge
     created_at: float = Field(default_factory=time.time)
 

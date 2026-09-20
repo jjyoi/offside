@@ -61,7 +61,10 @@ export function FindingReview({
   const bookedOutcome = useRef<string | null>(receivedAppeal?.outcome ? receivedAppeal.id : null);
 
   useEffect(() => {
-    if (appeal?.outcome === "stands" && bookedOutcome.current !== appeal.id) {
+    if (
+      (appeal?.outcome === "stands" || appeal?.outcome === "downgraded") &&
+      bookedOutcome.current !== appeal.id
+    ) {
       bookedOutcome.current = appeal.id;
       setBookingKey((k) => k + 1);
     }
@@ -98,6 +101,7 @@ export function FindingReview({
   }, [stage, finding.id, onVerdict]);
 
   const overturned = appeal?.outcome === "overturned";
+  const downgraded = appeal?.outcome === "downgraded";
 
   return (
     <motion.div className="finding-card" {...fadeUp}>
@@ -165,9 +169,9 @@ export function FindingReview({
               severity={overturned ? "play_on" : finding.severity}
               muted={skip || resolvedOnMount}
               suppressGif={resolvedOnMount}
-              playerName={appeal?.outcome === "stands" ? playerName : null}
+              playerName={appeal?.outcome === "stands" || downgraded ? playerName : null}
               bookingKey={bookingKey}
-              bookingCaption={bookingKey > 0 ? "DECISION STANDS" : undefined}
+              bookingCaption={bookingKey > 0 ? (downgraded ? "DOWNGRADED" : "DECISION STANDS") : undefined}
             />
             {!overturned && finding.hp_delta !== 0 && <div className="hp-delta-tag">{finding.hp_delta} HP</div>}
           </div>
@@ -184,6 +188,20 @@ export function FindingReview({
               <p>{appeal.text}</p>
               <EvidenceList evidence={appeal.second_pass_evidence} />
               <p className="appeal-restored">+{Math.abs(finding.hp_delta)} HP restored.</p>
+            </div>
+          )}
+
+          {downgraded && appeal && (
+            <div className="appeal-result appeal-downgraded">
+              <span className="eyebrow">Decision downgraded</span>
+              <p>{appeal.text}</p>
+              <EvidenceList evidence={appeal.second_pass_evidence} />
+              <p className="appeal-restored">
+                Red card talked down to yellow
+                {typeof appeal.hp_delta_before_downgrade === "number" &&
+                  ` — +${Math.abs(appeal.hp_delta_before_downgrade) - Math.abs(finding.hp_delta)} HP recovered`}
+                . The ref still has a concern, but it no longer blocks the push.
+              </p>
             </div>
           )}
 

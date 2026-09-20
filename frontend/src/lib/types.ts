@@ -37,7 +37,7 @@ export interface Finding {
   evidence: Evidence[];
 }
 
-export type AppealOutcome = "overturned" | "stands";
+export type AppealOutcome = "overturned" | "downgraded" | "stands";
 
 export interface Appeal {
   id: string;
@@ -47,6 +47,8 @@ export interface Appeal {
   claimed_hypothesis?: string | null;
   second_pass_evidence: Evidence[];
   outcome?: AppealOutcome | null;
+  downgraded_severity?: Severity | null;
+  hp_delta_before_downgrade?: number | null;
   hp_penalty?: number;
   created_at: number;
 }
