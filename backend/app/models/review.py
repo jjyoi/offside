@@ -19,6 +19,12 @@ class ReviewStatus(str, Enum):
     blocked = "blocked"
 
 
+class ExplanationLevel(str, Enum):
+    intern = "intern"
+    mid = "mid"
+    staff = "staff"
+
+
 class Severity(str, Enum):
     play_on = "play_on"
     yellow = "yellow"
@@ -93,6 +99,7 @@ class ReviewSession(BaseModel):
     diff: str
     commits: list[str] = Field(default_factory=list)
     author: str | None = None
+    level: ExplanationLevel = ExplanationLevel.mid
 
     status: ReviewStatus = ReviewStatus.collecting
 

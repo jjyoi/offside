@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 
-from app.routers import events, reviews  # noqa: E402
+from app.routers import events, reviews, settings  # noqa: E402
 
 app = FastAPI(title="Offside Review Backend")
 
@@ -24,6 +24,7 @@ app.add_middleware(
 
 app.include_router(reviews.router)
 app.include_router(events.router)
+app.include_router(settings.router)
 
 
 @app.get("/health")

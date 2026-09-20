@@ -6,7 +6,7 @@ import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
-from app.models import ReviewSession, ReviewStatus
+from app.models import ExplanationLevel, ReviewSession, ReviewStatus
 from app.pipeline.review import run_appeal_investigation, run_review
 from app.store import store
 
@@ -24,6 +24,7 @@ class CreateReviewRequest(BaseModel):
     commits: list[str] = []
     repo_path: str | None = None
     author: str | None = None
+    level: ExplanationLevel = ExplanationLevel.mid
 
 
 class CreateReviewResponse(BaseModel):
@@ -50,6 +51,7 @@ async def create_review(req: CreateReviewRequest) -> CreateReviewResponse:
         diff=req.diff,
         commits=req.commits,
         author=req.author,
+        level=req.level,
     )
     await store.create(session)
     _repo_paths[session.id] = req.repo_path

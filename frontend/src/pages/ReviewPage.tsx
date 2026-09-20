@@ -6,6 +6,7 @@ import { FindingReview } from "../components/FindingReview";
 import { CardBadge } from "../components/CardBadge";
 import { HpBar } from "../components/HpBar";
 import { BookingsTracker } from "../components/BookingsTracker";
+import { SettingsButton } from "../components/SettingsButton";
 import { submitAppeal, continuePush } from "../lib/api";
 
 export function ReviewPage() {
@@ -115,6 +116,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
           <span className="team" title={session.branch}>{session.branch}</span>
         </div>
         <HpBar hpBefore={session.hp_before} hpAfter={displayedHp} />
+        <SettingsButton />
       </header>
 
       {showIntro ? (

@@ -1,4 +1,4 @@
-import type { ReviewSession } from "./types";
+import type { ExplanationLevel, ReviewSession } from "./types";
 
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
@@ -21,6 +21,21 @@ export async function continuePush(sessionId: string): Promise<{ status: "approv
   const resp = await fetch(`${BACKEND_URL}/api/reviews/${sessionId}/continue`, { method: "POST" });
   if (!resp.ok) throw new Error(`Failed to continue push: ${resp.status}`);
   return resp.json();
+}
+
+export async function fetchLevel(): Promise<ExplanationLevel> {
+  const resp = await fetch(`${BACKEND_URL}/api/settings`);
+  if (!resp.ok) throw new Error(`Failed to load settings: ${resp.status}`);
+  return (await resp.json()).level;
+}
+
+export async function saveLevel(level: ExplanationLevel): Promise<void> {
+  const resp = await fetch(`${BACKEND_URL}/api/settings`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ level }),
+  });
+  if (!resp.ok) throw new Error(`Failed to save settings: ${resp.status}`);
 }
 
 export function subscribeToEvents(sessionId: string, onEvent: (type: string, data: any) => void): () => void {

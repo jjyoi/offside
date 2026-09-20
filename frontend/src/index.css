@@ -1245,3 +1245,89 @@ a {
   background: #912018;
   border-color: #912018;
 }
+
+/* ---------- settings ---------- */
+
+.settings {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.btn-settings {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+.settings-panel {
+  position: absolute;
+  text-align: left;
+  top: calc(100% + 0.5rem);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: min(20rem, 85vw);
+  padding: 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+}
+
+.settings-panel-right {
+  right: 0;
+}
+
+.settings-panel-center {
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.settings-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.settings-option {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.settings-option.is-selected {
+  border-color: var(--ink);
+  background: rgba(10, 11, 13, 0.05);
+}
+
+.settings-option input {
+  grid-row: span 2;
+  align-self: center;
+}
+
+.settings-option-label {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.settings-option-blurb {
+  font-size: 0.75rem;
+  color: var(--ink-dim);
+}
+
+.settings-note {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+}
+
+.settings-error {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--red);
+}

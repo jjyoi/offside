@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models import Evidence, EvidenceType, Finding, ReviewSession, ReviewStatus, Severity
+from app.models import Evidence, EvidenceType, ExplanationLevel, Finding, ReviewSession, ReviewStatus, Severity
 from app.pipeline.diff_parser import parse_diff
 from app.pipeline.provider import RefereeVerdict, get_provider
 from app.store import store
@@ -43,8 +43,8 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
     fast_provider = get_provider("fast")
 
     for hunk in hunks:
-        prompt = _build_fast_prompt(hunk.file, hunk.raw)
-        result = await fast_provider.complete(_FAST_SYSTEM_PROMPT, prompt)
+        prompt = _build_fast_prompt(hunk.file, hunk.raw, session.level)
+        result = await fast_provider.complete(_FAST_SYSTEM_PROMPT + level_instruction(session.level), prompt)
         await store.emit(
             session_id,
             "check.completed",
@@ -74,8 +74,8 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
                 )
             )
             deep_provider = get_provider("deep")
-            deep_prompt = _build_deep_prompt(hunk.file, hunk.raw, evidence)
-            deep_result = await deep_provider.complete(_DEEP_SYSTEM_PROMPT, deep_prompt)
+            deep_prompt = _build_deep_prompt(hunk.file, hunk.raw, evidence, session.level)
+            deep_result = await deep_provider.complete(_DEEP_SYSTEM_PROMPT + level_instruction(session.level), deep_prompt)
             await store.emit(
                 session_id,
                 "check.completed",
@@ -179,8 +179,8 @@ async def run_appeal_investigation(session_id: str, finding_id: str, appeal_text
         await store.emit(session_id, "appeal.evidence_added", {"summary": ev.summary, "type": ev.type.value})
 
     deep_provider = get_provider("deep")
-    prompt = _build_appeal_prompt(finding, appeal_text, hypothesis, new_evidence)
-    result = await deep_provider.complete(_APPEAL_SYSTEM_PROMPT, prompt)
+    prompt = _build_appeal_prompt(finding, appeal_text, hypothesis, new_evidence, session.level)
+    result = await deep_provider.complete(_APPEAL_SYSTEM_PROMPT + level_instruction(session.level), prompt)
     verdict = result.verdict
 
     supports_developer = (not verdict.offence) or verdict.severity == "play_on"
@@ -265,18 +265,47 @@ Respond ONLY with compact JSON matching: {"offence": bool, "category": str, "sev
 showed and why it does or doesn't support the developer."""
 
 
-def _build_fast_prompt(file: str, hunk_raw: str) -> str:
-    return f"FILE: {file}\n\nDIFF HUNK:\n{hunk_raw}\n"
+_LEVEL_INSTRUCTIONS = {
+    ExplanationLevel.intern: (
+        "The reader is a junior engineer. Make `explanation` a friendly walkthrough of 3-5 sentences: what the "
+        "code does, what is wrong, why it matters in practice, and how to fix it. Define any jargon you use."
+    ),
+    ExplanationLevel.mid: (
+        "The reader is a mid-level engineer. Make `explanation` 1-2 sentences: what is wrong and why it matters."
+    ),
+    ExplanationLevel.staff: (
+        "The reader is a staff engineer. Make `explanation` a single terse sentence naming the issue. No "
+        "background, no advice."
+    ),
+}
 
 
-def _build_deep_prompt(file: str, hunk_raw: str, evidence: list[Evidence]) -> str:
+def level_instruction(level: ExplanationLevel) -> str:
+    """Appended to each system prompt so `explanation` is written at the reader's depth."""
+    return f"\n\nEXPLANATION DEPTH: {_LEVEL_INSTRUCTIONS[level]}"
+
+
+def _build_fast_prompt(file: str, hunk_raw: str, level: ExplanationLevel = ExplanationLevel.mid) -> str:
+    return f"EXPLANATION LEVEL: {level.value}\nFILE: {file}\n\nDIFF HUNK:\n{hunk_raw}\n"
+
+
+def _build_deep_prompt(
+    file: str, hunk_raw: str, evidence: list[Evidence], level: ExplanationLevel = ExplanationLevel.mid
+) -> str:
     ev_text = "\n".join(f"- [{e.type.value}] {e.summary} (strength={e.strength})" for e in evidence) or "none"
-    return f"FILE: {file}\n\nDIFF HUNK:\n{hunk_raw}\n\nEVIDENCE GATHERED:\n{ev_text}\n"
+    return f"EXPLANATION LEVEL: {level.value}\nFILE: {file}\n\nDIFF HUNK:\n{hunk_raw}\n\nEVIDENCE GATHERED:\n{ev_text}\n"
 
 
-def _build_appeal_prompt(finding: Finding, appeal_text: str, hypothesis: str, evidence: list[Evidence]) -> str:
+def _build_appeal_prompt(
+    finding: Finding,
+    appeal_text: str,
+    hypothesis: str,
+    evidence: list[Evidence],
+    level: ExplanationLevel = ExplanationLevel.mid,
+) -> str:
     ev_text = "\n".join(f"- [{e.type.value}] {e.summary} (strength={e.strength})" for e in evidence) or "none"
     return (
+        f"EXPLANATION LEVEL: {level.value}\n"
         f"ORIGINAL FINDING:\nFile: {finding.file}:{finding.start_line}-{finding.end_line}\n"
         f"Severity: {finding.severity.value}\nExplanation: {finding.explanation}\n\n"
         f"DEVELOPER'S APPEAL:\n{appeal_text}\n\n"
