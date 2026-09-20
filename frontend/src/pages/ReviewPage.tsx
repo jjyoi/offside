@@ -188,6 +188,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                 <FindingReview
                   key={finding.id}
                   finding={finding}
+                  repoPath={session.repo_path}
                   index={activeIndex}
                   diff={session.diff}
                   skip={skip || revealedIds.has(finding.id)}

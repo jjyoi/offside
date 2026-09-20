@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { playWhistle } from "../lib/sound";
 
 const DURATION_MS = 2500;
 const FADE_SECONDS = 0.25;
@@ -24,7 +23,6 @@ export function PlayOnCelebration({ id }: { id: string }) {
       started.current = true;
       seen.add(id);
       try { sessionStorage.setItem(`offside:play-on:${id}`, "played"); } catch { /* Storage is optional. */ }
-      playWhistle();
     }
     const timer = window.setTimeout(() => setVisible(false), DURATION_MS - FADE_SECONDS * 1000);
     return () => window.clearTimeout(timer);

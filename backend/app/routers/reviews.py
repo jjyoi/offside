@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -46,10 +47,23 @@ _repo_paths: dict[str, str | None] = {}
 _pending_appeals: set[tuple[str, str]] = set()
 
 
+def _resolve_repo_path(repo: str, repo_path: str | None) -> str | None:
+    if repo_path:
+        return repo_path
+    # Older demo sessions did not include a checkout path. The bundled fixture
+    # has a known location, so these sessions can still offer working IDE links.
+    root = Path(__file__).resolve().parents[3]
+    if repo == "offside-demo" and (root / "examples/flagged_demo.py").is_file():
+        return str(root)
+    return None
+
+
 @router.post("", response_model=CreateReviewResponse)
 async def create_review(req: CreateReviewRequest) -> CreateReviewResponse:
+    repo_path = _resolve_repo_path(req.repo, req.repo_path)
     session = ReviewSession(
         repo=req.repo,
+        repo_path=repo_path,
         branch=req.branch,
         local_sha=req.local_sha,
         remote_sha=req.remote_sha,
@@ -59,9 +73,9 @@ async def create_review(req: CreateReviewRequest) -> CreateReviewResponse:
         level=req.level or settings.get_level(),
     )
     await store.create(session)
-    _repo_paths[session.id] = req.repo_path
+    _repo_paths[session.id] = repo_path
 
-    asyncio.create_task(run_review(session.id, req.repo_path))
+    asyncio.create_task(run_review(session.id, repo_path))
 
     return CreateReviewResponse(
         session_id=session.id,
@@ -74,6 +88,8 @@ async def get_review(session_id: str) -> ReviewSession:
     session = store.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="review session not found")
+    if not session.repo_path:
+        session.repo_path = _resolve_repo_path(session.repo, _repo_paths.get(session.id))
     return session
 
 

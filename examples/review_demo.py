@@ -31,6 +31,7 @@ def main():
     backend = os.environ.get("OFFSIDE_BACKEND_URL", "http://localhost:8000").rstrip("/")
     payload = {
         "repo": "offside-demo",
+        "repo_path": str(Path(__file__).resolve().parents[1]),
         "branch": "demo/several-findings",
         "local_sha": "demo-working-copy",
         "diff": build_demo_diff(),

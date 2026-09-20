@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import type { Severity } from "../lib/types";
 import { WHISTLE_GIF } from "../lib/gifs";
-import { playCardStamp, playWhistle } from "../lib/sound";
+import { playCardStamp } from "../lib/sound";
 
 const LABELS: Record<Severity, string> = {
   play_on: "PLAY ON",
@@ -38,9 +38,7 @@ export function CardBadge({ severity, muted, suppressGif, playerName, bookingKey
   useEffect(() => {
     if (played.current || muted) return;
     played.current = true;
-    if (severity === "play_on") {
-      playWhistle();
-    } else {
+    if (severity !== "play_on") {
       playCardStamp();
     }
   }, [severity, muted]);

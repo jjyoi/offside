@@ -112,6 +112,7 @@ class ReviewEvent(BaseModel):
 class ReviewSession(BaseModel):
     id: str = Field(default_factory=lambda: new_id("review"))
     repo: str
+    repo_path: str | None = None
     branch: str
     local_sha: str
     remote_sha: str | None = None

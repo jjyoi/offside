@@ -7,11 +7,13 @@ import { EvidenceList } from "./EvidenceList";
 import { AppealForm } from "./AppealForm";
 import { AppealWaiting } from "./AppealWaiting";
 import { PlayOnCelebration } from "./PlayOnCelebration";
+import { CodeLink } from "./CodeLink";
 
 type Stage = "diff" | "explanation" | "evidence" | "roast" | "verdict";
 
 interface Props {
   finding: Finding;
+  repoPath?: string | null;
   index: number;
   diff: string;
   skip: boolean;
@@ -41,6 +43,7 @@ const fadeUp = {
 
 export function FindingReview({
   finding,
+  repoPath,
   index,
   diff,
   skip,
@@ -108,14 +111,7 @@ export function FindingReview({
     <motion.div className="finding-card" {...fadeUp}>
       <div className="finding-header">
         <span className="incident-no">Incident {String(index + 1).padStart(2, "0")}</span>
-        <a
-          className="finding-file finding-file-link"
-          href={`vscode://file/${finding.file}:${finding.start_line}`}
-          title="Open in IDE"
-        >
-          {finding.file}:{finding.start_line}
-          {finding.end_line !== finding.start_line ? `-${finding.end_line}` : ""}
-        </a>
+        <CodeLink repoPath={repoPath} file={finding.file} startLine={finding.start_line} endLine={finding.end_line} />
         <span className="finding-category">{finding.category}</span>
       </div>
 
@@ -234,10 +230,14 @@ export function FindingReview({
               <span className="eyebrow">Suggested fix</span>
               <p>{finding.suggested_fix}</p>
               {finding.fix_decision === "accepted" && (
+                <>
+                <CodeLink repoPath={repoPath} file={finding.file} startLine={finding.start_line}
+                  endLine={finding.end_line} label="View fix" showEditor={false} />
                 <p className="fix-status fix-status-accepted">
                   Fix accepted, +{Math.floor(Math.abs(finding.hp_delta) / 2)} HP back. It isn't part of this push, so
                   apply it next. The terminal will list it.
                 </p>
+                </>
               )}
               {finding.fix_decision === "declined" && (
                 <p className="fix-status fix-status-declined">Conceded with no fix agreed. The push is stopped.</p>

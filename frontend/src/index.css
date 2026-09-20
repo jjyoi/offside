@@ -486,13 +486,25 @@ a {
 }
 
 .finding-file-link {
+  color: #175b3a;
+  font-weight: 700;
   text-decoration: underline;
+  text-decoration-thickness: 2px;
   text-underline-offset: 2px;
   cursor: pointer;
 }
 
 .finding-file-link:hover {
   color: var(--ink);
+}
+
+.code-link-editor {
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-dim);
+  font: 500 0.7rem/1.3 var(--mono);
 }
 
 .finding-category {

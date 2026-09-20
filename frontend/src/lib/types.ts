@@ -63,6 +63,7 @@ export interface ReviewEvent {
 export interface ReviewSession {
   id: string;
   repo: string;
+  repo_path?: string | null;
   branch: string;
   local_sha: string;
   remote_sha?: string | null;
