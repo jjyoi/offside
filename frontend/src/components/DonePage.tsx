@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import type { Finding, ReviewSession } from "../lib/types";
 import { HpBar } from "./HpBar";
+import { PlayOnCelebration } from "./PlayOnCelebration";
 
 interface Props {
   session: ReviewSession;
@@ -38,6 +39,7 @@ export function DonePage({ session, hpAfter, blocked }: Props) {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.4 }}
     >
+      {!blocked && <PlayOnCelebration key={session.id} id={`approved:${session.id}`} />}
       <div className={`done-stamp ${blocked ? "done-stamp-blocked" : "done-stamp-approved"}`}>
         {blocked ? "PUSH BLOCKED" : "PUSH ALLOWED"}
       </div>

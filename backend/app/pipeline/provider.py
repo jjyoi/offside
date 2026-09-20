@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from openai import AsyncOpenAI
 from pydantic import BaseModel, ValidationError
 
+from app.pipeline.localization import localized_fields
+
 _TIMEOUT_CLAIM_RE = re.compile(
     r"timeout\s*[:=]?\s*(\d+)|(\d+)[\s-]*(?:second|sec|ms|millisecond)s?\s*timeout", re.IGNORECASE
 )
@@ -215,9 +217,11 @@ _INTERN_DEFAULT_NOTE = "Take a moment to check the surrounding code and confirm 
 def _level_from_prompt(prompt: str) -> str:
     match = _LEVEL_RE.search(prompt)
     level = match.group(1).lower() if match else "mid"
-    # messi/ronaldo/son only change tone and language, which this deterministic rule-based
-    # fallback (no LLM, no translation) can't produce — review at the normal "mid" bar instead.
-    return level if level in {"intern", "mid", "staff"} else "mid"
+    return level if level in {"intern", "mid", "staff", "messi", "ronaldo", "son"} else "mid"
+
+
+def _localized(verdict: RefereeVerdict, level: str, event: str, pattern: str = "") -> RefereeVerdict:
+    return verdict.model_copy(update=localized_fields(level, event, verdict.category, pattern))
 
 
 def _at_level(level: str, category: str, mid: str, staff: str) -> str:
@@ -266,6 +270,7 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
                 needs_investigation=needs_investigation,
                 investigation_reason=f"Added line contains '{pattern}'.",
             )
+            candidate = _localized(candidate, level, "added", pattern)
             if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
                 best = candidate
 
@@ -286,6 +291,7 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
                 needs_investigation=True,
                 investigation_reason=f"Removed guard containing '{pattern}'; verify callers still enforce it.",
             )
+            candidate = _localized(candidate, level, "removed", pattern)
             if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
                 best = candidate
 
@@ -305,14 +311,14 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
     if best is not None:
         return best
 
-    return RefereeVerdict(
+    return _localized(RefereeVerdict(
         offence=False,
         category="none",
         severity="play_on",
         confidence=0.9,
         explanation="No suspicious patterns detected in the outgoing diff.",
         roast="Clean run, no whistle needed.",
-    )
+    ), level, "clean")
 
 
 def _heuristic_appeal_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
@@ -328,7 +334,10 @@ def _heuristic_appeal_verdict(prompt: str, level: str = "mid") -> RefereeVerdict
         original_severity = "red"
 
     category = "reliability"
-    if "security" in prompt.lower():
+    category_match = re.search(r"^Category: (\w+)$", prompt, re.MULTILINE)
+    if category_match:
+        category = category_match.group(1)
+    elif "security" in prompt.lower():
         category = "security"
 
     appeal_section = prompt.split("DEVELOPER'S APPEAL:", 1)[-1]
@@ -351,7 +360,7 @@ def _heuristic_appeal_verdict(prompt: str, level: str = "mid") -> RefereeVerdict
         strong_enough = strong_enough and "repo_context" in evidence_section
 
     if strong_enough:
-        return RefereeVerdict(
+        return _localized(RefereeVerdict(
             offence=False,
             category=category,
             severity="play_on",
@@ -364,9 +373,9 @@ def _heuristic_appeal_verdict(prompt: str, level: str = "mid") -> RefereeVerdict
                 staff="Evidence backs the claim.",
             ),
             roast="Fair cop, ref got it wrong. Play on.",
-        )
+        ), level, "overturned")
 
-    return RefereeVerdict(
+    return _localized(RefereeVerdict(
         offence=True,
         category=category,
         severity=original_severity,
@@ -379,7 +388,7 @@ def _heuristic_appeal_verdict(prompt: str, level: str = "mid") -> RefereeVerdict
             staff="No evidence backs the claim.",
         ),
         roast="Nice try, but VAR isn't buying it without receipts.",
-    )
+    ), level, "upheld")
 
 
 def _roast_for(category: str, severity: str) -> str:

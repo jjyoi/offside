@@ -445,7 +445,7 @@ def _build_appeal_prompt(
     return (
         f"EXPLANATION LEVEL: {level.value}\n"
         f"ORIGINAL FINDING:\nFile: {finding.file}:{finding.start_line}-{finding.end_line}\n"
-        f"Severity: {finding.severity.value}\nExplanation: {finding.explanation}\n\n"
+        f"Category: {finding.category}\nSeverity: {finding.severity.value}\nExplanation: {finding.explanation}\n\n"
         f"DEVELOPER'S APPEAL:\n{appeal_text}\n\n"
         f"EXTRACTED HYPOTHESIS:\n{hypothesis}\n\n"
         f"NEW EVIDENCE GATHERED TO VERIFY THE HYPOTHESIS:\n{ev_text}\n"

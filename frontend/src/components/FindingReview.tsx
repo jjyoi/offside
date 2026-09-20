@@ -6,7 +6,7 @@ import { CardBadge } from "./CardBadge";
 import { EvidenceList } from "./EvidenceList";
 import { AppealForm } from "./AppealForm";
 import { AppealWaiting } from "./AppealWaiting";
-import { BouncingBall } from "./BouncingBall";
+import { PlayOnCelebration } from "./PlayOnCelebration";
 
 type Stage = "diff" | "explanation" | "evidence" | "roast" | "verdict";
 
@@ -103,7 +103,6 @@ export function FindingReview({
 
   const overturned = appeal?.outcome === "overturned";
   const downgraded = appeal?.outcome === "downgraded";
-  const [ballDismissed, setBallDismissed] = useState(false);
 
   return (
     <motion.div className="finding-card" {...fadeUp}>
@@ -197,7 +196,7 @@ export function FindingReview({
             </div>
           )}
 
-          {overturned && !ballDismissed && <BouncingBall onDismiss={() => setBallDismissed(true)} />}
+          {overturned && appeal && !resolvedOnMount && <PlayOnCelebration key={appeal.id} id={`appeal:${appeal.id}`} />}
 
           {downgraded && appeal && (
             <div className="appeal-result appeal-downgraded">
