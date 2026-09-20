@@ -14,7 +14,7 @@ cli/       Python CLI + git pre-push hook installer
 
 ## Setup
 
-Requires Python 3.11+, Node 18+, and `uv` (or `pip`).
+Requires Python 3.11+, Node 20.19+ (or 22.12+), and `uv` (or `pip`). **Step-by-step install, connecting a repo, usage and troubleshooting are in [SETUP.md](SETUP.md).**
 
 ```sh
 # Backend
@@ -32,25 +32,33 @@ uv venv .venv && uv pip install -e . --python .venv/bin/python
 
 ## Running the demo
 
-Start the backend and frontend (each in their own terminal):
+Start the backend and the review page with one command. It waits until both are healthy, reuses anything already running, and Ctrl-C stops what it started:
 
 ```sh
-# Terminal 1
-cd backend && .venv/bin/uvicorn app.main:app --port 8000
-
-# Terminal 2
-cd frontend && npm run dev   # serves on http://localhost:3000
+./demo.sh                  # or: ./demo.sh /path/to/repo   to also run `offside doctor` there
 ```
 
-Install the hook into any local git repo you want to protect, and make sure `offside` is on your `PATH`:
+Connect any local git repo (once per clone):
 
 ```sh
-export PATH="/path/to/offside/cli/.venv/bin:$PATH"
+export PATH="/path/to/offside/cli/.venv/bin:$PATH"   # only to run the `offside` command yourself
 cd /path/to/some/repo
-offside install
+offside connect
 ```
 
-Now `git push` from that repo will pause, open a browser VAR review, and allow or block the push based on the verdict.
+From then on a plain `git push` from that repo opens the browser VAR review and allows or blocks the push based on the verdict. `offside connect` installs the hook and sets `push.autoSetupRemote`, so `git push` also works on a brand-new branch. The hook records the CLI's absolute path, so pushes do not depend on your `PATH`.
+
+If the backend and review page are not running when you push, the hook starts them itself (stop them with `offside down`, or start them ahead of time with `offside up`). `./demo.sh` does the same in the foreground with live status, if you prefer that.
+
+### Installing for a whole repo
+
+`offside connect --shared` writes the hook to a committed `.githooks/` folder and points `core.hooksPath` at it. Commit that folder, and a teammate only needs to run `offside connect` once after cloning. Git does not run repo-supplied hooks automatically, so that one step per clone is unavoidable. An existing pre-push hook is kept and still runs first.
+
+### If Offside is down
+
+Pushes never fail silently. If the backend or the review page is not responding and can't be started, the hook prints a boxed warning saying the push was not reviewed. By default the push then goes through (fail open); set `OFFSIDE_FAIL_OPEN=0` to block instead. Run `offside doctor` in a repo to check the backend, the review page, the hook, and your level.
+
+The local hook can be skipped with `git push --no-verify`. Enforcing the review for everyone would need a required status check on the server side.
 
 ## Model provider
 
