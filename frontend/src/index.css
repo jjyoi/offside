@@ -804,7 +804,8 @@ a {
 
 .continue-bar {
   display: flex;
-  justify-content: center;
+  flex-direction: column;
+  align-items: center;
   padding: 0.5rem 0;
 }
 
@@ -1330,4 +1331,98 @@ a {
   margin: 0;
   font-size: 0.75rem;
   color: var(--red);
+}
+
+/* ---------- manual pacing ---------- */
+
+.step-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.btn-next {
+  color: var(--yellow-ink);
+  background: var(--yellow);
+  border-color: var(--yellow);
+}
+
+.btn-next:hover:not(:disabled) {
+  background: #ffd633;
+  border-color: #ffd633;
+}
+
+.step-hint {
+  font-size: 0.72rem;
+  color: var(--ink-faint);
+}
+
+.continue-note {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+  text-align: center;
+}
+
+/* ---------- findings overview ---------- */
+
+.overview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem 0.9rem;
+  background: var(--panel);
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+}
+
+.overview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.overview-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.overview-item:hover:not(:disabled) {
+  background: rgba(10, 11, 13, 0.06);
+}
+
+.overview-item.is-active {
+  border-color: var(--ink);
+}
+
+.overview-file {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overview-category {
+  color: var(--ink-dim);
+}
+
+.overview-status {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--ink-faint);
 }
