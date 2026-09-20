@@ -32,6 +32,7 @@ export interface Finding {
   roast: string;
   suggested_fix: string;
   hp_delta: number;
+  appeal_penalty: number;
   fix_decision?: FixDecision | null;
   evidence: Evidence[];
 }
@@ -46,6 +47,7 @@ export interface Appeal {
   claimed_hypothesis?: string | null;
   second_pass_evidence: Evidence[];
   outcome?: AppealOutcome | null;
+  hp_penalty?: number;
   created_at: number;
 }
 

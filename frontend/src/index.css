@@ -1360,7 +1360,7 @@ a {
 .continue-note {
   margin: 0 0 0.5rem;
   font-size: 0.8rem;
-  color: var(--ink-dim);
+  color: #f1ead6;
   text-align: center;
 }
 
@@ -1461,5 +1461,42 @@ a {
 }
 
 .fix-status-declined {
+  color: var(--red);
+}
+
+/* ---------- contest stakes ---------- */
+
+.confidence-line {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-dim);
+}
+
+.contest-trigger {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.contest-stakes {
+  margin: 0;
+  font-size: 0.8rem;
+  text-align: center;
+  color: var(--ink-dim);
+}
+
+.stake-win {
+  font-weight: 700;
+  color: var(--green);
+}
+
+.stake-lose {
+  font-weight: 700;
+  color: var(--red);
+}
+
+.appeal-penalty {
+  margin: 0;
+  font-weight: 700;
   color: var(--red);
 }

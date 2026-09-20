@@ -67,6 +67,8 @@ class Finding(BaseModel):
     suggested_fix: str = ""
 
     hp_delta: int = 0
+    # Extra HP lost if the developer contests this call and loses. Scales with the ref's confidence.
+    appeal_penalty: int = 0
     fix_decision: FixDecision | None = None
 
     evidence: list[Evidence] = Field(default_factory=list)
@@ -87,6 +89,7 @@ class Appeal(BaseModel):
     second_pass_evidence: list[Evidence] = Field(default_factory=list)
 
     outcome: AppealOutcome | None = None
+    hp_penalty: int = 0  # negative; HP lost for a failed challenge
     created_at: float = Field(default_factory=time.time)
 
 

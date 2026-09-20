@@ -1,6 +1,6 @@
 import pytest
 
-from app.models import ReviewSession, ReviewStatus
+from app.models import Finding, ReviewSession, ReviewStatus, Severity
 from app.pipeline import review as review_module
 from app.pipeline.review import run_appeal_investigation, run_review
 from app.store import SessionStore
@@ -69,7 +69,8 @@ async def test_appeal_with_weak_claim_stands_and_stays_blocked(patched_store):
 
     result = patched_store.get(session.id)
     assert result.appeals[-1].outcome == "stands"
-    assert result.status == ReviewStatus.awaiting_appeal
+    # A failed challenge on a confident red card takes the last of the HP, which blocks the push.
+    assert result.status == ReviewStatus.blocked
     assert len(result.findings) == 1
 
 
@@ -225,3 +226,117 @@ def test_prompt_standard_differs_by_level():
     staff = level_instruction(ExplanationLevel.staff)
     assert "gently" in intern and "design" not in intern.split("EXPLANATION DEPTH")[0].lower()
     assert "design" in staff.lower() and "high bar" in staff
+
+
+def test_penalty_grows_with_confidence():
+    from app.pipeline.review import appeal_penalty_for
+
+    assert appeal_penalty_for(-56, 0.9) > appeal_penalty_for(-56, 0.5) > appeal_penalty_for(-56, 0.2)
+    assert appeal_penalty_for(-56, 0.9) > 56  # losing a confident challenge costs more than the card itself
+    assert appeal_penalty_for(0, 0.9) == 0
+
+
+async def test_failed_contest_costs_hp_and_is_recorded(patched_store):
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=RED_DIFF)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+    before = patched_store.get(session.id)
+    finding = before.findings[0]
+    hp_with_card = before.hp_after
+
+    await run_appeal_investigation(session.id, finding.id, "trust me it's fine", repo_path=None)
+
+    after = patched_store.get(session.id)
+    assert after.appeals[-1].outcome == "stands"
+    assert after.appeals[-1].hp_penalty == -finding.appeal_penalty < 0
+    assert after.hp_after == hp_with_card - finding.appeal_penalty
+
+
+async def test_won_contest_restores_the_card_and_charges_nothing(patched_store, monkeypatch):
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=RED_DIFF)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+    finding = patched_store.get(session.id).findings[0]
+
+    class Overturn:
+        async def complete(self, system, prompt):
+            from app.pipeline.provider import ModelResult, RefereeVerdict
+
+            return ModelResult(RefereeVerdict(offence=False, severity="play_on"), 1.0, "fake", "")
+
+    monkeypatch.setattr(review_module, "get_provider", lambda tier: Overturn())
+    await run_appeal_investigation(session.id, finding.id, "the caller sets it", repo_path=None)
+
+    after = patched_store.get(session.id)
+    assert after.appeals[-1].outcome == "overturned"
+    assert after.appeals[-1].hp_penalty == 0
+    assert after.hp_after == after.hp_before
+
+
+async def test_failed_contest_that_hits_zero_hp_blocks_immediately(patched_store):
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=RED_DIFF)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+    finding = patched_store.get(session.id).findings[0]
+
+    await run_appeal_investigation(session.id, finding.id, "trust me it's fine", repo_path=None)
+
+    result = patched_store.get(session.id)
+    assert result.hp_after <= 0
+    assert result.status == ReviewStatus.blocked
+
+
+def test_fix_refund_is_half_the_card():
+    from app.pipeline.review import fix_refund_for
+
+    assert fix_refund_for(-56) == 28
+    assert fix_refund_for(0) == 0
+
+
+def _outcomes(hp_delta, confidence, others=()):
+    """HP after each way of handling one card, with optional other cards left alone."""
+    from app.models import Appeal, AppealOutcome, FixDecision
+    from app.pipeline.review import appeal_penalty_for, compute_hp
+
+    def card(decision=None):
+        return Finding(
+            id="f", file="a.py", start_line=1, end_line=1, category="c", severity=Severity.yellow,
+            confidence=confidence, explanation="", roast="", hp_delta=hp_delta, fix_decision=decision,
+        )
+
+    rest = [
+        Finding(id=f"o{i}", file="b.py", start_line=1, end_line=1, category="c", severity=Severity.yellow,
+                confidence=0.5, explanation="", roast="", hp_delta=d)
+        for i, d in enumerate(others)
+    ]
+    lost = Appeal(finding_id="f", text="x", outcome=AppealOutcome.stands,
+                  hp_penalty=-appeal_penalty_for(hp_delta, confidence))
+    won = Appeal(finding_id="f", text="x", outcome=AppealOutcome.overturned)
+    return {
+        "ignore": compute_hp(100, [card(), *rest], []),
+        "accept": compute_hp(100, [card(FixDecision.accepted), *rest], []),
+        "win": compute_hp(100, [card(), *rest], [won]),
+        "lose": compute_hp(100, [card(), *rest], [lost]),
+        "lose_then_accept": compute_hp(100, [card(FixDecision.accepted), *rest], [lost]),
+    }
+
+
+def test_contest_outcomes_are_always_ordered_around_accepting():
+    """Winning gets back at least as much as accepting; losing leaves you with less than accepting."""
+    confidences = [0.0, 0.1, 0.35, 0.5, 0.75, 0.9, 1.0]
+    for hp_delta in range(-60, -4):
+        for confidence in confidences:
+            for others in ((), (-57, -54, -30), (-90, -90)):  # includes piles of cards that sink HP below zero
+                o = _outcomes(hp_delta, confidence, others)
+                ctx = (hp_delta, confidence, others, o)
+                assert o["win"] >= o["accept"], ctx
+                assert o["lose"] < o["accept"], ctx
+                assert o["lose_then_accept"] < o["accept"], ctx
+                assert o["accept"] > o["ignore"], ctx
+
+
+def test_losing_a_contest_always_costs_something():
+    from app.pipeline.review import appeal_penalty_for
+
+    assert appeal_penalty_for(-5, 0.0) >= 1
+    assert appeal_penalty_for(0, 0.9) == 0

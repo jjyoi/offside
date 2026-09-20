@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from app.models import ExplanationLevel, FixDecision, ReviewSession, ReviewStatus
-from app.pipeline.review import run_appeal_investigation, run_review
+from app.pipeline.review import compute_hp, run_appeal_investigation, run_review
 from app.store import store
 
 router = APIRouter(prefix="/api/reviews", tags=["reviews"])
@@ -129,6 +129,9 @@ async def continue_push(session_id: str) -> dict:
     )
     if any(f.fix_decision == FixDecision.declined for f in session.findings):
         has_red = True
+    if session.hp_after <= 0:
+        # Knocked out: no HP left means no push, whatever the cards say.
+        has_red = True
     if has_red:
         await store.update(session_id, status=ReviewStatus.blocked)
         await store.emit(session_id, "review.blocked", {"hpAfter": session.hp_after})
@@ -181,8 +184,11 @@ async def decide_fix(session_id: str, finding_id: str, req: FixDecisionRequest) 
     findings = [
         f.model_copy(update={"fix_decision": req.decision}) if f.id == finding_id else f for f in session.findings
     ]
-    await store.update(session_id, findings=findings)
-    await store.emit(session_id, "fix.decided", {"findingId": finding_id, "decision": req.decision.value})
+    hp_after = compute_hp(session.hp_before, findings, session.appeals)
+    await store.update(session_id, findings=findings, hp_after=hp_after)
+    await store.emit(
+        session_id, "fix.decided", {"findingId": finding_id, "decision": req.decision.value, "hpAfter": hp_after}
+    )
 
     if req.decision == FixDecision.declined:
         await store.update(session_id, status=ReviewStatus.blocked)
