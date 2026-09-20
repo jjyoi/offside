@@ -183,6 +183,8 @@ def _print_result(session: dict, blocked: bool) -> None:
     findings = session.get("findings", [])
     if blocked:
         print(f"PUSH BLOCKED — HP {hp}")
+        if hp <= 0:
+            print("  OUT OF HP: with no HP left the push is blocked.")
         for f in findings:
             if f["severity"] == "red" and f.get("fix_decision") != "accepted":
                 print(f"  RED CARD {f['file']}:{f['start_line']} — {f['explanation']}")

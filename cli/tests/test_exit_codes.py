@@ -60,3 +60,8 @@ def test_print_result_blocked_names_conceded_findings(capsys):
     }
     _print_result(session, blocked=True)
     assert "b.py:1" in capsys.readouterr().out
+
+
+def test_print_result_explains_a_zero_hp_block(capsys):
+    _print_result({"hp_after": 0, "findings": []}, blocked=True)
+    assert "OUT OF HP" in capsys.readouterr().out

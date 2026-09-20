@@ -53,3 +53,31 @@ def test_cannot_decide_after_review_finished(client):
     store._sessions[session.id].status = ReviewStatus.approved
     r = c.post(f"/api/reviews/{session.id}/findings/{finding.id}/fix", json={"decision": "accepted"})
     assert r.status_code == 409
+
+
+def test_zero_hp_blocks_the_push(client):
+    c, store = client
+    session, _ = _session(store, Severity.yellow)
+    store._sessions[session.id].hp_after = 0
+    assert c.post(f"/api/reviews/{session.id}/continue").json() == {"status": "blocked"}
+
+
+def test_accepting_a_fix_gives_back_half_the_card(client):
+    c, store = client
+    session, finding = _session(store)  # card is -40
+    store._sessions[session.id].hp_after = 60
+    c.post(f"/api/reviews/{session.id}/findings/{finding.id}/fix", json={"decision": "accepted"})
+    assert store.get(session.id).hp_after == 80
+
+
+def test_accepted_fixes_can_pull_you_back_from_zero(client):
+    c, store = client
+    session, first = _session(store)
+    second = first.model_copy(update={"id": "finding_two", "hp_delta": -70})
+    session.findings.append(second)
+    first.hp_delta = -70
+    session.hp_after = 0  # -140 clamps to 0: knocked out
+    for f in (first, second):
+        c.post(f"/api/reviews/{session.id}/findings/{f.id}/fix", json={"decision": "accepted"})
+    assert store.get(session.id).hp_after == 30  # 100 - 70 - 70 + 35 + 35
+    assert c.post(f"/api/reviews/{session.id}/continue").json() == {"status": "approved"}

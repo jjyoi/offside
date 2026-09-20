@@ -25,6 +25,40 @@ def hp_delta_for(severity: Severity, confidence: float) -> int:
     return -round(lo + (hi - lo) * confidence)
 
 
+def appeal_penalty_for(hp_delta: int, confidence: float) -> int:
+    """HP lost on top of the card when a contest fails. The surer the ref was, the harder the fall,
+    so challenging a confident call is a real bet: win it back, or pay for it."""
+    if hp_delta == 0:
+        return 0
+    return max(1, round(abs(hp_delta) * 1.5 * confidence))
+
+
+def fix_refund_for(hp_delta: int) -> int:
+    """Taking the ref's advice earns half the card's HP back.
+
+    Contest outcomes are kept strictly ordered around this: a won contest returns the whole card
+    (at least as much as accepting), and a lost one costs the card plus a penalty (always less
+    than accepting)."""
+    return abs(hp_delta) // 2
+
+
+def compute_hp(hp_before: int, findings: list[Finding], appeals: list) -> int:
+    from app.models import AppealOutcome, FixDecision
+
+    overturned = {a.finding_id for a in appeals if a.outcome == AppealOutcome.overturned}
+    hp = hp_before
+    for f in findings:
+        if f.id in overturned:
+            continue
+        hp += f.hp_delta
+        if f.fix_decision == FixDecision.accepted:
+            hp += fix_refund_for(f.hp_delta)
+    hp += sum(a.hp_penalty for a in appeals)
+    # No floor: HP can go negative. That keeps every choice strictly ordered even deep in the red
+    # (win a contest > accept the fix > lose a contest), which a clamp at 0 would flatten.
+    return min(hp, 100)
+
+
 async def run_review(session_id: str, repo_path: str | None) -> None:
     """Full first-pass pipeline: deterministic checks -> fast referee -> investigation -> verdict."""
     session = store.get(session_id)
@@ -100,6 +134,7 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
             suggested_fix=verdict.suggested_fix,
             roast=verdict.roast,
             hp_delta=hp_delta_for(severity, verdict.confidence),
+            appeal_penalty=appeal_penalty_for(hp_delta_for(severity, verdict.confidence), verdict.confidence),
             evidence=evidence,
         )
         findings.append(finding)
@@ -110,7 +145,6 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
         )
 
     hp_after = session.hp_before + sum(f.hp_delta for f in findings)
-    hp_after = max(hp_after, 0)
 
     await store.update(session_id, findings=findings, hp_after=hp_after)
     await store.emit(session_id, "verdict.ready", {"findingCount": len(findings), "hpAfter": hp_after})
@@ -197,6 +231,7 @@ async def run_appeal_investigation(session_id: str, finding_id: str, appeal_text
         claimed_hypothesis=hypothesis,
         second_pass_evidence=new_evidence,
         outcome=AppealOutcome(outcome),
+        hp_penalty=-finding.appeal_penalty if outcome == "stands" else 0,
     )
 
     appeals = [*session.appeals, appeal]
@@ -205,13 +240,18 @@ async def run_appeal_investigation(session_id: str, finding_id: str, appeal_text
     # finding + evidence to still be there to render the "DECISION OVERTURNED"
     # card. Only the HP/blocking effect of an overturned finding is nulled out.
     overturned_ids = {a.finding_id for a in appeals if a.outcome == AppealOutcome.overturned}
-    hp_after = session.hp_before + sum(f.hp_delta for f in session.findings if f.id not in overturned_ids)
-    hp_after = max(hp_after, 0)
+    hp_after = compute_hp(session.hp_before, session.findings, appeals)
 
     await store.update(session_id, appeals=appeals, hp_after=hp_after)
     await store.emit(session_id, "appeal.completed", {"findingId": finding_id, "outcome": outcome})
 
     session = store.get(session_id)
+    if outcome == "stands" and hp_after <= 0:
+        # The failed challenge was the death knell.
+        await store.update(session_id, status=ReviewStatus.blocked)
+        await store.emit(session_id, "review.blocked", {"hpAfter": hp_after, "knockedOut": True})
+        return
+
     unresolved = [f for f in session.findings if f.id not in overturned_ids]
     if unresolved:
         # Any remaining card (yellow or red, including this one if it stood) still

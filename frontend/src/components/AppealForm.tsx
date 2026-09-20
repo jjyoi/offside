@@ -6,13 +6,15 @@ import { useSpeechRecognition } from "../hooks/useSpeechRecognition";
 interface Props {
   onSubmit: (text: string) => void;
   disabled?: boolean;
+  /** HP gained if the contest wins and lost if it fails, shown so it reads as a real bet. */
+  stakes?: { win: number; lose: number };
 }
 
 type Phase = "idle" | "intro" | "form";
 
 const TIME_LIMIT_SECONDS = 60;
 
-export function AppealForm({ onSubmit, disabled }: Props) {
+export function AppealForm({ onSubmit, disabled, stakes }: Props) {
   const [phase, setPhase] = useState<Phase>("idle");
   const [text, setText] = useState("");
   const [secondsLeft, setSecondsLeft] = useState(TIME_LIMIT_SECONDS);
@@ -47,14 +49,17 @@ export function AppealForm({ onSubmit, disabled }: Props) {
 
   if (phase === "idle") {
     return (
-      <button
-        type="button"
-        className="btn btn-contest btn-contest-trigger"
-        disabled={disabled}
-        onClick={() => setPhase("intro")}
-      >
-        Contest Decision
-      </button>
+      <div className="contest-trigger">
+        <button
+          type="button"
+          className="btn btn-contest btn-contest-trigger"
+          disabled={disabled}
+          onClick={() => setPhase("intro")}
+        >
+          Contest Decision
+        </button>
+        {stakes && <Stakes {...stakes} />}
+      </div>
     );
   }
 
@@ -127,11 +132,23 @@ export function AppealForm({ onSubmit, disabled }: Props) {
             </div>
           )}
 
+          {stakes && <Stakes {...stakes} />}
+
           <button type="submit" className="btn btn-contest" disabled={disabled || !text.trim()}>
             Submit Appeal
           </button>
         </motion.form>
       )}
     </>
+  );
+}
+
+function Stakes({ win, lose }: { win: number; lose: number }) {
+  return (
+    <p className="contest-stakes">
+      Win it: <span className="stake-win">+{win} HP</span>
+      <span aria-hidden="true"> · </span>
+      Lose it: <span className="stake-lose">−{lose} HP</span>
+    </p>
   );
 }
