@@ -212,6 +212,22 @@ def cmd_pre_push() -> None:
         print("Offside: no refs to push, allowing.")
         sys.exit(0)
 
+    repo_root = git_info.repo_root()
+    repo_slug = git_info.current_repo_slug()
+
+    # Work out what is actually being pushed first, so a branch deletion or empty push never
+    # starts (or waits on) the backend just to say there is nothing to review.
+    to_review = []
+    for local_ref, local_sha, remote_ref, remote_sha in refs:
+        push_range = git_info.build_push_range(local_ref, local_sha, remote_ref, remote_sha, cwd=repo_root)
+        if not push_range.diff:
+            print(f"Offside: no diff to review for {push_range.branch} (branch deletion or empty push), allowing.")
+            continue
+        to_review.append(push_range)
+
+    if not to_review:
+        sys.exit(0)
+
     if not prefs.is_set("level"):
         print("Offside: explanation level is mid. Change it with `offside config level <intern|mid|staff>`.")
 
@@ -223,17 +239,8 @@ def cmd_pre_push() -> None:
             sys.exit(_fail_open(reason))
         print("  ready.\n")
 
-    repo_root = git_info.repo_root()
-    repo_slug = git_info.current_repo_slug()
-
     exit_code = 0
-    for local_ref, local_sha, remote_ref, remote_sha in refs:
-        push_range = git_info.build_push_range(local_ref, local_sha, remote_ref, remote_sha, cwd=repo_root)
-
-        if not push_range.diff:
-            print(f"Offside: no diff to review for {push_range.branch} (branch deletion or empty push), allowing.")
-            continue
-
+    for push_range in to_review:
         code = review_one(repo_slug, repo_root, push_range)
         exit_code = exit_code or code
 

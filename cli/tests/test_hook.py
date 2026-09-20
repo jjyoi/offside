@@ -8,7 +8,7 @@ import pytest
 
 from offside import hook
 
-REFS = "refs/heads/feature 1111111111111111111111111111111111111111 refs/heads/feature 0000000000000000000000000000000000000000\n"
+ZERO = "0" * 40
 CLOSED_PORT = "http://127.0.0.1:9"  # nothing listens here, so the backend looks down
 
 
@@ -18,14 +18,28 @@ def git(repo, *args):
 
 @pytest.fixture
 def repo(tmp_path):
-    git(tmp_path, "init", "-q")
+    git(tmp_path, "init", "-q", "-b", "main")
+    git(tmp_path, "config", "user.email", "t@t")
+    git(tmp_path, "config", "user.name", "t")
+    (tmp_path / "a.py").write_text("x = 1\n")
+    git(tmp_path, "add", "a.py")
+    git(tmp_path, "commit", "-qm", "base")
+    # A feature branch with a change on top of main, so the push has a real diff to review.
+    git(tmp_path, "checkout", "-q", "-b", "feature")
+    (tmp_path / "a.py").write_text("x = 1\ny = 2\n")
+    git(tmp_path, "commit", "-qam", "change")
     return tmp_path
+
+
+def refs_line(repo):
+    """What git feeds a pre-push hook for a brand-new branch: <local ref> <sha> <remote ref> <zeros>."""
+    return f"refs/heads/feature {git(repo, 'rev-parse', 'HEAD')} refs/heads/feature {ZERO}\n"
 
 
 def run_hook(repo, extra_env=None, hooks_dir=None):
     hook_path = (Path(hooks_dir) if hooks_dir else Path(repo) / ".git" / "hooks") / "pre-push"
     env = {**os.environ, "OFFSIDE_BACKEND_URL": CLOSED_PORT, "OFFSIDE_FRONTEND_URL": CLOSED_PORT, "OFFSIDE_AUTOSTART": "0", **(extra_env or {})}
-    return subprocess.run(["sh", str(hook_path), "origin", "url"], cwd=repo, input=REFS, text=True, capture_output=True, env=env)
+    return subprocess.run(["sh", str(hook_path), "origin", "url"], cwd=repo, input=refs_line(repo), text=True, capture_output=True, env=env)
 
 
 def write_prev_hook(repo, body):
@@ -76,7 +90,7 @@ def test_existing_hook_is_chained_not_replaced(repo):
     assert result.chained
     assert (Path(repo) / ".git" / "hooks" / f"pre-push{hook.CHAINED_SUFFIX}").exists()
     out = run_hook(repo)
-    assert seen.read_text() == REFS  # the old hook still ran, with the same refs on stdin
+    assert seen.read_text() == refs_line(repo)  # the old hook still ran, with the same refs on stdin
     assert "OFFSIDE IS NOT RUNNING" in out.stdout  # and Offside ran after it
 
 

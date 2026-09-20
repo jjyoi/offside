@@ -103,3 +103,19 @@ def test_a_plain_git_push_creates_the_upstream_after_connect(tmp_path, monkeypat
     after = subprocess.run(["git", "push"], cwd=work, capture_output=True, text=True)
     assert after.returncode == 0
     assert git(work, "rev-parse", "--abbrev-ref", "feature@{upstream}") == "origin/feature"
+
+
+def test_deleting_a_branch_never_starts_or_contacts_offside(monkeypatch, capsys):
+    from offside import git_info
+
+    def boom(*a, **k):
+        raise AssertionError("a branch deletion must not touch the services")
+
+    monkeypatch.setattr(cli, "check_services", boom)
+    monkeypatch.setattr(services, "start", boom)
+    delete = ("refs/heads/old", "0" * 40, "refs/heads/old", "1" * 40)
+    monkeypatch.setattr(git_info, "read_stdin_refs", lambda: [delete])
+    with pytest.raises(SystemExit) as exit_info:
+        cli.cmd_pre_push()
+    assert exit_info.value.code == 0
+    assert "no diff to review" in capsys.readouterr().out
