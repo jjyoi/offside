@@ -710,7 +710,7 @@ a {
 
 .card-slap-rect {
   position: relative;
-  width: min(46vw, 260px);
+  width: min(53.82vw, 304.2px, 46.8vh);
   aspect-ratio: 2 / 3;
   border-radius: 14px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
@@ -721,7 +721,7 @@ a {
 }
 
 .card-slap-name {
-  font: 700 clamp(1.1rem, 4vw, 1.6rem) / 1.15 var(--display);
+  font: 700 clamp(1.287rem, 4.68vw, 1.872rem) / 1.15 var(--display);
   letter-spacing: 0.01em;
   color: rgba(10, 11, 13, 0.82);
   text-align: center;
@@ -739,7 +739,8 @@ a {
 }
 
 .card-slap-caption {
-  font: 800 clamp(1.8rem, 6vw, 3rem) / 1 var(--display);
+  max-width: calc(100vw - 2rem);
+  font: 800 clamp(2.106rem, 7.02vw, 3.51rem) / 1 var(--display);
   letter-spacing: 0.02em;
   text-transform: uppercase;
   text-align: center;

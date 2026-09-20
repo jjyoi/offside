@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "motion/react";
 import type { Severity } from "../lib/types";
 import { WHISTLE_GIF } from "../lib/gifs";
@@ -15,11 +16,12 @@ const SLAP_CAPTIONS: Partial<Record<Severity, string>> = {
   red: "RED CARD",
 };
 
-const SLAP_DURATION_MS = 3000;
+const SLAP_DURATION_MS = 2000;
 
 interface Props {
   severity: Severity;
   muted?: boolean;
+  suppressGif?: boolean;
   /** Player being booked — printed on the card during the slap. */
   playerName?: string | null;
   /** Bump this to re-trigger the full slap animation (e.g. a failed contest). */
@@ -28,7 +30,7 @@ interface Props {
   bookingCaption?: string;
 }
 
-export function CardBadge({ severity, muted, playerName, bookingKey = 0, bookingCaption }: Props) {
+export function CardBadge({ severity, muted, suppressGif, playerName, bookingKey = 0, bookingCaption }: Props) {
   const played = useRef(false);
   const lastBookingKey = useRef(bookingKey);
   const [slapping, setSlapping] = useState(!muted && severity !== "play_on");
@@ -62,7 +64,7 @@ export function CardBadge({ severity, muted, playerName, bookingKey = 0, booking
 
   return (
     <div className={`card-badge card-${severity}`}>
-      <AnimatePresence>
+      {createPortal(<AnimatePresence>
         {slapping && (
           <motion.div
             className="card-slap-overlay"
@@ -102,9 +104,9 @@ export function CardBadge({ severity, muted, playerName, bookingKey = 0, booking
             )}
           </motion.div>
         )}
-      </AnimatePresence>
+      </AnimatePresence>, document.body)}
 
-      {severity === "play_on" && WHISTLE_GIF && <img src={WHISTLE_GIF} alt="" className="card-gif" />}
+      {severity === "play_on" && !suppressGif && WHISTLE_GIF && <img src={WHISTLE_GIF} alt="" className="card-gif" />}
       {severity !== "play_on" && !slapping && (
         <motion.div
           className={`card-rect card-rect-${severity}`}

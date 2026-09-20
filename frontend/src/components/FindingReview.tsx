@@ -44,12 +44,13 @@ export function FindingReview({
   onContest,
   onVerdict,
 }: Props) {
-  const [waitingDone, setWaitingDone] = useState(false);
+  const [resolvedOnMount] = useState(Boolean(receivedAppeal?.outcome));
+  const [waitingDone, setWaitingDone] = useState(Boolean(receivedAppeal?.outcome));
   const appeal = appealSubmitted && !waitingDone ? undefined : receivedAppeal;
-  const [stageIndex, setStageIndex] = useState(skip ? STAGE_ORDER.length - 1 : 0);
+  const [stageIndex, setStageIndex] = useState(skip || resolvedOnMount ? STAGE_ORDER.length - 1 : 0);
   const stage = STAGE_ORDER[stageIndex];
   const [bookingKey, setBookingKey] = useState(0);
-  const bookedOutcome = useRef<string | null>(null);
+  const bookedOutcome = useRef<string | null>(receivedAppeal?.outcome ? receivedAppeal.id : null);
 
   useEffect(() => {
     if (appeal?.outcome === "stands" && bookedOutcome.current !== appeal.id) {
@@ -95,7 +96,7 @@ export function FindingReview({
         endLine={finding.end_line}
         diff={diff}
         onDone={advance}
-        skip={skip}
+        skip={skip || resolvedOnMount}
       />
 
       <AnimatePresence>
@@ -133,7 +134,8 @@ export function FindingReview({
           <div className="card-decision">
             <CardBadge
               severity={overturned ? "play_on" : finding.severity}
-              muted={skip}
+              muted={skip || resolvedOnMount}
+              suppressGif={resolvedOnMount}
               playerName={appeal?.outcome === "stands" ? playerName : null}
               bookingKey={bookingKey}
               bookingCaption={bookingKey > 0 ? "DECISION STANDS" : undefined}

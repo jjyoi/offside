@@ -1,10 +1,11 @@
+import { createPortal } from "react-dom";
 import { motion } from "motion/react";
 import { CONTEST_INTRO_GIF, CONTEST_INTRO_DURATION_MS } from "../lib/gifs";
 import { useGifPlayback } from "../hooks/useGifPlayback";
 
 export function ContestIntro({ onDone }: { onDone: () => void }) {
   const playback = useGifPlayback(CONTEST_INTRO_GIF, CONTEST_INTRO_GIF ? CONTEST_INTRO_DURATION_MS + 400 : 1800, onDone);
-  return (
+  return createPortal(
     <motion.div
       className="contest-intro-overlay"
       initial={{ opacity: 0 }}
@@ -40,6 +41,7 @@ export function ContestIntro({ onDone }: { onDone: () => void }) {
       >
         Make your case
       </motion.div>
-    </motion.div>
+    </motion.div>,
+    document.body,
   );
 }
