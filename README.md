@@ -54,15 +54,15 @@ Now `git push` from that repo will pause, open a browser VAR review, and allow o
 
 ## Model provider
 
-Review verdicts come from `backend/app/pipeline/provider.py`. If `BASETEN_API_KEY` and `BASETEN_FAST_MODEL_ID` / `BASETEN_DEEP_MODEL_ID` are set, Offside calls Baseten-hosted models (via the OpenAI-compatible `https://inference.baseten.co/v1` endpoint) for the fast and deep review passes. Without them, it falls back to a deterministic rule-based referee so the full pipeline (evidence gathering, cards, appeals) works end-to-end with no external dependency.
+Review verdicts come from `backend/app/pipeline/provider.py`. If `OPENAI_API_KEY` is set, Offside calls the OpenAI API for the fast and deep review passes. Without it, it falls back to a deterministic rule-based referee so the full pipeline (evidence gathering, cards, appeals) works end-to-end with no external dependency.
 
 ```sh
-export BASETEN_API_KEY=...
-export BASETEN_FAST_MODEL_ID=deepseek-ai/DeepSeek-V4-Flash-0731   # cheap/fast pass
-export BASETEN_DEEP_MODEL_ID=deepseek-ai/DeepSeek-V4-0731         # deeper investigation/appeal pass
+export OPENAI_API_KEY=...
+export OPENAI_FAST_MODEL_ID=gpt-4o-mini   # cheap/fast pass (default if unset)
+export OPENAI_DEEP_MODEL_ID=gpt-4o        # deeper investigation/appeal pass (default if unset)
 ```
 
-Model IDs are whatever Baseten's Model API catalog calls them (`org/model-name`). Use a smaller/faster model for `BASETEN_FAST_MODEL_ID` and a stronger one for `BASETEN_DEEP_MODEL_ID` per the spec's fast/deep routing.
+`OPENAI_FAST_MODEL_ID` / `OPENAI_DEEP_MODEL_ID` are optional — they default to `gpt-4o-mini` and `gpt-4o` respectively. Use a smaller/faster model for the fast tier and a stronger one for the deep tier per the spec's fast/deep routing.
 
 ## Configuration
 

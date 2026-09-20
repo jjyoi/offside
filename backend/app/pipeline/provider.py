@@ -53,20 +53,13 @@ class ModelProvider(ABC):
     async def complete(self, system: str, prompt: str) -> ModelResult: ...
 
 
-class BasetenProvider(ModelProvider):
-    """Calls a Baseten Model API using the OpenAI-compatible client.
+class OpenAIProvider(ModelProvider):
+    """Calls the OpenAI API directly via the official SDK."""
 
-    Baseten exposes any supported model behind https://inference.baseten.co/v1,
-    so we can use the standard `openai` SDK with the Baseten API key rather than
-    hand-rolling requests against a model-specific predict URL.
-    """
-
-    def __init__(self, model_id: str, api_key: str, base_url: str | None = None, label: str = "baseten") -> None:
+    def __init__(self, model_id: str, api_key: str, label: str = "openai") -> None:
         self.model_id = model_id
         self.name = label
-        self._client = AsyncOpenAI(
-            api_key=api_key, base_url=base_url or "https://inference.baseten.co/v1", timeout=25.0, max_retries=1
-        )
+        self._client = AsyncOpenAI(api_key=api_key, timeout=25.0, max_retries=1)
 
     async def complete(self, system: str, prompt: str) -> ModelResult:
         start = time.perf_counter()
@@ -331,15 +324,22 @@ def _roast_for(category: str, severity: str) -> str:
     return roasts.get((category, severity), "The ref has seen worse, but not much worse.")
 
 
+_DEFAULT_FAST_MODEL = "gpt-4o-mini"
+_DEFAULT_DEEP_MODEL = "gpt-4o"
+
+
 def get_provider(tier: str) -> ModelProvider:
-    """tier: 'fast' or 'deep'. Returns Baseten if configured, else the rule-based fallback."""
-    api_key = os.environ.get("BASETEN_API_KEY")
+    """tier: 'fast' or 'deep'. Returns an OpenAI-backed provider if configured, else the
+    deterministic rule-based fallback. The fast tier uses a cheap/quick model for the
+    first pass over every diff hunk; the deep tier uses a stronger model for investigation
+    and appeals, per the spec's fast/deep routing."""
+    api_key = os.environ.get("OPENAI_API_KEY")
+    if not api_key:
+        return RuleBasedProvider(label=f"rule-based-{tier}")
+
     if tier == "fast":
-        model_id = os.environ.get("BASETEN_FAST_MODEL_ID")
+        model_id = os.environ.get("OPENAI_FAST_MODEL_ID", _DEFAULT_FAST_MODEL)
     else:
-        model_id = os.environ.get("BASETEN_DEEP_MODEL_ID")
+        model_id = os.environ.get("OPENAI_DEEP_MODEL_ID", _DEFAULT_DEEP_MODEL)
 
-    if api_key and model_id:
-        return BasetenProvider(model_id=model_id, api_key=api_key, label=f"baseten-{tier}")
-
-    return RuleBasedProvider(label=f"rule-based-{tier}")
+    return OpenAIProvider(model_id=model_id, api_key=api_key, label=f"openai-{tier}")
