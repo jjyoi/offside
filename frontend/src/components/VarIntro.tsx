@@ -1,20 +1,16 @@
 import { useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { VAR_REVIEW_GIF } from "../lib/gifs";
+import { VAR_REVIEW_GIF, VAR_REVIEW_DURATION_MS } from "../lib/gifs";
+import { useGifPlayback } from "../hooks/useGifPlayback";
 
 export function VarIntro({ onDone, skip }: { onDone: () => void; skip?: boolean }) {
   const [phase, setPhase] = useState(0);
+  const playback = useGifPlayback(VAR_REVIEW_GIF, Math.max(1900, VAR_REVIEW_DURATION_MS + 300), onDone, skip);
 
   useEffect(() => {
-    if (skip) {
-      onDone();
-      return;
-    }
     const t1 = setTimeout(() => setPhase(1), 700);
-    const t2 = setTimeout(() => onDone(), 1900);
     return () => {
       clearTimeout(t1);
-      clearTimeout(t2);
     };
   }, [skip]);
 
@@ -35,7 +31,7 @@ export function VarIntro({ onDone, skip }: { onDone: () => void; skip?: boolean 
         </div>
         <div className="monitor-screen">
           {VAR_REVIEW_GIF ? (
-            <img src={VAR_REVIEW_GIF} alt="VAR review in progress" className="var-gif" />
+            <img src={VAR_REVIEW_GIF} {...playback} alt="VAR review in progress" className="var-gif" />
           ) : (
             <motion.div
               className="var-box"

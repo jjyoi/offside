@@ -17,7 +17,7 @@ export async function submitAppeal(sessionId: string, findingId: string, text: s
   if (!resp.ok) throw new Error(`Failed to submit appeal: ${resp.status}`);
 }
 
-export async function continuePush(sessionId: string): Promise<{ status: string }> {
+export async function continuePush(sessionId: string): Promise<{ status: "approved" | "blocked" }> {
   const resp = await fetch(`${BACKEND_URL}/api/reviews/${sessionId}/continue`, { method: "POST" });
   if (!resp.ok) throw new Error(`Failed to continue push: ${resp.status}`);
   return resp.json();

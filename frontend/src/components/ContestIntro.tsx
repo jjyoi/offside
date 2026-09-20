@@ -1,7 +1,9 @@
 import { motion } from "motion/react";
-import { CONTEST_INTRO_GIF } from "../lib/gifs";
+import { CONTEST_INTRO_GIF, CONTEST_INTRO_DURATION_MS } from "../lib/gifs";
+import { useGifPlayback } from "../hooks/useGifPlayback";
 
 export function ContestIntro({ onDone }: { onDone: () => void }) {
+  const playback = useGifPlayback(CONTEST_INTRO_GIF, CONTEST_INTRO_GIF ? CONTEST_INTRO_DURATION_MS + 400 : 1800, onDone);
   return (
     <motion.div
       className="contest-intro-overlay"
@@ -9,14 +11,11 @@ export function ContestIntro({ onDone }: { onDone: () => void }) {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.2 }}
-      onAnimationComplete={() => {
-        const timer = setTimeout(onDone, 1600);
-        return () => clearTimeout(timer);
-      }}
     >
       {CONTEST_INTRO_GIF ? (
         <motion.img
           src={CONTEST_INTRO_GIF}
+          {...playback}
           alt="Coach storming onto the pitch to contest the call"
           className="contest-intro-gif"
           initial={{ scale: 0.7, opacity: 0 }}

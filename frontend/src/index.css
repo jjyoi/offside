@@ -982,7 +982,7 @@ a {
   text-shadow: 0 0 30px rgba(255, 204, 0, 0.4), 0 2px 0 rgba(0, 0, 0, 0.4);
 }
 
-.coach-running {
+.appeal-waiting {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -990,38 +990,18 @@ a {
   padding: 0.4rem 0 0;
 }
 
-.coach-gif {
+.appeal-waiting-gif {
   width: min(100%, 240px);
   height: auto;
   border-radius: 10px;
 }
 
-.coach-track {
-  position: relative;
-  width: 100%;
-  height: 40px;
-  overflow: hidden;
-  border-bottom: 1px dashed var(--hairline);
-}
-
-.coach-figure {
-  position: absolute;
-  bottom: 0;
-  width: 26px;
-  height: 38px;
-  color: var(--ink-dim);
-}
-
-.coach-caption {
+.appeal-waiting-caption {
   font: 600 0.72rem/1.2 var(--mono);
   letter-spacing: 0.03em;
   color: var(--ink-faint);
 }
 
-.coach-caption::after {
-  content: "";
-  animation: dots 1.2s steps(1) infinite;
-}
 
 .appeal-result {
   padding: 0.85rem 1rem;
@@ -1174,8 +1154,7 @@ a {
   .ball,
   .rec i,
   .typing-cursor,
-  .var-caption::after,
-  .coach-caption::after {
+  .var-caption::after {
     animation: none;
   }
 }
@@ -1221,4 +1200,16 @@ a {
   background: var(--panel);
   border-radius: 10px;
   font: 500 0.75rem/1.4 var(--mono);
+}
+
+.btn-block {
+  padding: 0.75rem 1.5rem;
+  color: #fff;
+  background: #b42318;
+  border-color: #b42318;
+}
+
+.btn-block:hover:not(:disabled) {
+  background: #912018;
+  border-color: #912018;
 }

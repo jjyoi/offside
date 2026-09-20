@@ -20,6 +20,8 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
   const [pendingAppealFindingId, setPendingAppealFindingId] = useState<string | null>(null);
   const [submittedAppealFindingIds, setSubmittedAppealFindingIds] = useState<Set<string>>(new Set());
   const [continuing, setContinuing] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
+  const [completedStatus, setCompletedStatus] = useState<"approved" | "blocked" | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [revealedIds, setRevealedIds] = useState<Set<string>>(new Set());
   const handleVerdict = useCallback((id: string) => {
@@ -72,15 +74,23 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
 
   const handleContinue = async () => {
     setContinuing(true);
+    setCompletionError(null);
     try {
-      await continuePush(sessionId);
+      const result = await continuePush(sessionId);
+      setCompletedStatus(result.status);
+    } catch {
+      setCompletionError("Could not finish the review. Please try again.");
     } finally {
       setContinuing(false);
     }
   };
 
   const noFindings = session.findings.length === 0 && session.status !== "reviewing" && session.status !== "collecting";
-  const isTerminal = session.status === "approved" || session.status === "blocked";
+  const finalStatus = completedStatus ?? session.status;
+  const isTerminal = finalStatus === "approved" || finalStatus === "blocked";
+  const appealInProgress = pendingAppealFindingId !== null || [...submittedAppealFindingIds].some(
+    (id) => !session.appeals.some((appeal) => appeal.finding_id === id && appeal.outcome),
+  );
   const hasUnresolvedRed = session.findings.some(
     (f) => f.severity === "red" && !session.appeals.some((a) => a.finding_id === f.id && a.outcome === "overturned"),
   );
@@ -144,6 +154,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                   appeal={appeal}
                   appealPending={pendingAppealFindingId === finding.id}
                   appealSubmitted={submittedAppealFindingIds.has(finding.id)}
+                  reviewFinished={isTerminal || continuing}
                   playerName={session.author}
                   onContest={handleContest}
                 />
@@ -164,18 +175,20 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
             </nav>
           )}
 
-          {!isReviewing && !isTerminal && !hasUnresolvedRed && allRevealed && (
+          {!isReviewing && !isTerminal && allRevealed && (
             <div className="continue-bar">
-              <button className="btn btn-continue" onClick={handleContinue} disabled={continuing}>
-                {continuing ? "Continuing..." : "Continue Push"}
+              <button className={`btn ${hasUnresolvedRed ? "btn-block" : "btn-continue"}`} onClick={handleContinue} disabled={continuing || appealInProgress}>
+                {continuing ? "Finishing review..." : appealInProgress ? "Waiting for appeal..." : hasUnresolvedRed ? "Accept verdict / Block push" : "Continue Push"}
               </button>
             </div>
           )}
 
-          {session.status === "approved" && (
+          {completionError && !isTerminal && <div className="terminal-banner terminal-blocked" role="alert">{completionError}</div>}
+
+          {finalStatus === "approved" && (
             <div className="terminal-banner terminal-approved">PUSH ALLOWED — the waiting `git push` will now continue.</div>
           )}
-          {session.status === "blocked" && (
+          {finalStatus === "blocked" && (
             <div className="terminal-banner terminal-blocked">PUSH BLOCKED — the waiting `git push` has been stopped.</div>
           )}
 

@@ -37,6 +37,7 @@ class AppealRequest(BaseModel):
 
 
 _repo_paths: dict[str, str | None] = {}
+_pending_appeals: set[tuple[str, str]] = set()
 
 
 @router.post("", response_model=CreateReviewResponse)
@@ -106,6 +107,13 @@ async def continue_push(session_id: str) -> dict:
     if session is None:
         raise HTTPException(status_code=404, detail="review session not found")
 
+    if session.status in (ReviewStatus.approved, ReviewStatus.blocked):
+        return {"status": session.status.value}
+    if session.status != ReviewStatus.awaiting_appeal:
+        raise HTTPException(status_code=409, detail="review is still running")
+    if any(key[0] == session_id for key in _pending_appeals):
+        raise HTTPException(status_code=409, detail="an appeal is still running")
+
     from app.models import AppealOutcome, Severity
 
     overturned_ids = {a.finding_id for a in session.appeals if a.outcome == AppealOutcome.overturned}
@@ -125,10 +133,22 @@ async def submit_appeal(session_id: str, req: AppealRequest) -> dict:
     session = store.get(session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="review session not found")
+    if session.status != ReviewStatus.awaiting_appeal:
+        raise HTTPException(status_code=409, detail="review is not accepting appeals")
     finding = next((f for f in session.findings if f.id == req.finding_id), None)
     if finding is None:
         raise HTTPException(status_code=404, detail="finding not found")
 
-    repo_path = _repo_paths.get(session_id)
-    asyncio.create_task(run_appeal_investigation(session_id, req.finding_id, req.text, repo_path))
+    key = (session_id, req.finding_id)
+    if key in _pending_appeals or any(a.finding_id == req.finding_id for a in session.appeals):
+        raise HTTPException(status_code=409, detail="appeal already submitted")
+    _pending_appeals.add(key)
+
+    async def investigate() -> None:
+        try:
+            await run_appeal_investigation(session_id, req.finding_id, req.text, _repo_paths.get(session_id))
+        finally:
+            _pending_appeals.discard(key)
+
+    asyncio.create_task(investigate())
     return {"status": "appeal_started"}

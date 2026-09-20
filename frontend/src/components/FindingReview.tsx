@@ -5,7 +5,7 @@ import { DiffReplay } from "./DiffReplay";
 import { CardBadge } from "./CardBadge";
 import { EvidenceList } from "./EvidenceList";
 import { AppealForm } from "./AppealForm";
-import { CoachRunning } from "./CoachRunning";
+import { AppealWaiting } from "./AppealWaiting";
 
 type Stage = "diff" | "explanation" | "evidence" | "roast" | "verdict";
 
@@ -16,6 +16,7 @@ interface Props {
   skip: boolean;
   appeal?: Appeal;
   appealPending: boolean;
+  reviewFinished?: boolean;
   appealSubmitted: boolean;
   playerName?: string | null;
   onVerdict: (findingId: string) => void;
@@ -35,13 +36,16 @@ export function FindingReview({
   index,
   diff,
   skip,
-  appeal,
+  appeal: receivedAppeal,
   appealPending,
   appealSubmitted,
+  reviewFinished,
   playerName,
   onContest,
   onVerdict,
 }: Props) {
+  const [waitingDone, setWaitingDone] = useState(false);
+  const appeal = appealSubmitted && !waitingDone ? undefined : receivedAppeal;
   const [stageIndex, setStageIndex] = useState(skip ? STAGE_ORDER.length - 1 : 0);
   const stage = STAGE_ORDER[stageIndex];
   const [bookingKey, setBookingKey] = useState(0);
@@ -162,11 +166,11 @@ export function FindingReview({
             </div>
           )}
 
-          {finding.severity !== "play_on" && !appeal && !appealSubmitted && (
+          {finding.severity !== "play_on" && !reviewFinished && !appeal && !appealSubmitted && (
             <AppealForm onSubmit={(text) => onContest(finding.id, text)} disabled={appealPending} />
           )}
 
-          {appealSubmitted && !appeal && <CoachRunning />}
+          {appealSubmitted && !appeal && <AppealWaiting onDone={() => setWaitingDone(true)} />}
         </motion.div>
       )}
     </motion.div>
