@@ -37,16 +37,16 @@ def main() -> None:
 
 
 LEVEL_CHOICES = {
-    "1": ("intern", "full walkthrough, concepts explained"),
-    "2": ("mid", "what's wrong and why it matters"),
-    "3": ("staff", "one terse line"),
+    "1": ("intern", "gentler review, full walkthroughs; only serious problems get red cards"),
+    "2": ("mid", "balanced review, explains what's wrong and why it matters"),
+    "3": ("staff", "strict, design-focused review, one terse line per finding"),
 }
 
 
 def prompt_for_level(input_fn=None) -> str:
     """Ask which explanation level the user wants. Empty or invalid input keeps the default."""
     input_fn = input_fn or input
-    print("How much explanation do you want?")
+    print("How should Offside review your code? (this sets both how strict it is and how much it explains)")
     for key, (name, blurb) in LEVEL_CHOICES.items():
         print(f"  {key}) {name}: {blurb}")
     default = prefs.DEFAULTS["level"]

@@ -145,3 +145,83 @@ async def test_rule_based_findings_carry_a_suggested_fix(patched_store):
     await patched_store.create(session)
     await run_review(session.id, repo_path=None)
     assert patched_store.get(session.id).findings[0].suggested_fix
+
+
+LIGHT_DIFF = """diff --git a/a.py b/a.py
+--- a/a.py
++++ b/a.py
+@@ -1,1 +1,3 @@
+ x = 1
++# TODO tidy this up
++print("debug")
+"""
+
+GUARD_DIFF = """diff --git a/api.ts b/api.ts
+--- a/api.ts
++++ b/api.ts
+@@ -1,2 +1,2 @@
+-const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
++const res = await fetch(url);
+"""
+
+SECRET_DIFF = """diff --git a/auth.py b/auth.py
+--- a/auth.py
++++ b/auth.py
+@@ -1,1 +1,2 @@
+ import os
++password = "hunter2"
+"""
+
+
+async def _severities(patched_store, diff, level):
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=diff, level=level)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+    return [f.severity.value for f in patched_store.get(session.id).findings]
+
+
+async def test_light_issues_get_a_pass_for_everyone_but_mid(patched_store):
+    assert await _severities(patched_store, LIGHT_DIFF, "intern") == []
+    assert await _severities(patched_store, LIGHT_DIFF, "staff") == []
+    assert await _severities(patched_store, LIGHT_DIFF, "mid") == ["yellow"]
+
+
+async def test_removed_guard_costs_more_hp_with_seniority(patched_store):
+    async def hp_lost(level):
+        session = ReviewSession(repo="r", branch="b", local_sha="s", diff=GUARD_DIFF, level=level)
+        await patched_store.create(session)
+        await run_review(session.id, repo_path=None)
+        result = patched_store.get(session.id)
+        assert [f.severity.value for f in result.findings] == ["yellow"]
+        return result.hp_before - result.hp_after
+
+    assert await hp_lost("intern") < await hp_lost("mid") < await hp_lost("staff")
+
+
+async def test_swallowed_errors_are_red_only_for_staff(patched_store):
+    diff = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,1 +1,4 @@\n x = 1\n+try:\n+    y()\n+except:\n"
+    assert await _severities(patched_store, diff, "intern") == ["yellow"]
+    assert await _severities(patched_store, diff, "mid") == ["yellow"]
+    assert await _severities(patched_store, diff, "staff") == ["red"]
+
+
+async def test_hardcoded_secret_is_red_only_for_staff(patched_store):
+    assert await _severities(patched_store, SECRET_DIFF, "intern") == ["yellow"]
+    assert await _severities(patched_store, SECRET_DIFF, "mid") == ["yellow"]
+    assert await _severities(patched_store, SECRET_DIFF, "staff") == ["red"]
+
+
+async def test_egregious_problems_are_red_at_every_level(patched_store):
+    diff = "diff --git a/a.py b/a.py\n--- a/a.py\n+++ b/a.py\n@@ -1,1 +1,2 @@\n x = 1\n+eval(input())\n"
+    for level in ("intern", "mid", "staff"):
+        assert await _severities(patched_store, diff, level) == ["red"]
+
+
+def test_prompt_standard_differs_by_level():
+    from app.models import ExplanationLevel
+    from app.pipeline.review import level_instruction
+
+    intern = level_instruction(ExplanationLevel.intern)
+    staff = level_instruction(ExplanationLevel.staff)
+    assert "gently" in intern and "design" not in intern.split("EXPLANATION DEPTH")[0].lower()
+    assert "design" in staff.lower() and "high bar" in staff

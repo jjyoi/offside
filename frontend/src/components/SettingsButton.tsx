@@ -3,9 +3,9 @@ import { fetchLevel, saveLevel } from "../lib/api";
 import type { ExplanationLevel } from "../lib/types";
 
 const OPTIONS: { value: ExplanationLevel; label: string; blurb: string }[] = [
-  { value: "intern", label: "Intern", blurb: "Full walkthrough, concepts explained" },
-  { value: "mid", label: "Mid-level", blurb: "What's wrong and why it matters" },
-  { value: "staff", label: "Staff", blurb: "One terse line" },
+  { value: "intern", label: "Intern", blurb: "Gentler review, full walkthroughs. Only serious problems get red cards." },
+  { value: "mid", label: "Mid-level", blurb: "Balanced review. Explains what's wrong and why it matters." },
+  { value: "staff", label: "Staff", blurb: "Strict, design-focused review. One terse line per finding." },
 ];
 
 export function SettingsButton({ align = "right" }: { align?: "right" | "center" }) {
@@ -54,8 +54,8 @@ export function SettingsButton({ align = "right" }: { align?: "right" | "center"
 
       {open && (
         <div className={`settings-panel settings-panel-${align}`} role="dialog" aria-label="Settings">
-          <span className="eyebrow">Explanation depth</span>
-          <div className="settings-options" role="radiogroup" aria-label="Explanation depth">
+          <span className="eyebrow">Review level</span>
+          <div className="settings-options" role="radiogroup" aria-label="Review level">
             {OPTIONS.map((o) => (
               <label key={o.value} className={`settings-option ${level === o.value ? "is-selected" : ""}`}>
                 <input
