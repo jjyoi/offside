@@ -1,4 +1,4 @@
-import type { ExplanationLevel, ReviewSession } from "./types";
+import type { ExplanationLevel, FixDecision, ReviewSession } from "./types";
 
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:8000";
 
@@ -21,6 +21,15 @@ export async function continuePush(sessionId: string): Promise<{ status: "approv
   const resp = await fetch(`${BACKEND_URL}/api/reviews/${sessionId}/continue`, { method: "POST" });
   if (!resp.ok) throw new Error(`Failed to continue push: ${resp.status}`);
   return resp.json();
+}
+
+export async function decideFix(sessionId: string, findingId: string, decision: FixDecision): Promise<void> {
+  const resp = await fetch(`${BACKEND_URL}/api/reviews/${sessionId}/findings/${findingId}/fix`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ decision }),
+  });
+  if (!resp.ok) throw new Error(`Failed to record decision: ${resp.status}`);
 }
 
 export async function fetchLevel(): Promise<ExplanationLevel> {
@@ -51,6 +60,7 @@ export function subscribeToEvents(sessionId: string, onEvent: (type: string, dat
     "appeal.started",
     "appeal.evidence_added",
     "appeal.completed",
+    "fix.decided",
     "review.approved",
     "review.blocked",
   ];

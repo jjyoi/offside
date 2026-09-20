@@ -33,6 +33,7 @@ class RefereeVerdict(BaseModel):
     start_line: int | None = None
     end_line: int | None = None
     explanation: str = ""
+    suggested_fix: str = ""
     roast: str = ""
     needs_investigation: bool = False
     investigation_reason: str = ""
@@ -149,6 +150,48 @@ _RISK_PATTERNS = [
 
 _SEVERITY_RANK = {"red": 2, "yellow": 1, "play_on": 0}
 
+# Concrete fixes the rule-based referee can suggest, keyed by the pattern that tripped it.
+_FIXES = {
+    "eval(": "Replace eval() with ast.literal_eval() for data, or parse the input explicitly. Never execute strings.",
+    "exec(": "Remove exec(). Call the function you need directly, or dispatch through a dict of allowed handlers.",
+    "DROP TABLE": "Move the schema change into a reviewed migration and never build DDL from strings at runtime.",
+    "password": "Load the secret from an environment variable or secrets manager and compare with hmac.compare_digest().",
+    "TODO": "Finish the work now, or open a ticket and reference it in the comment so the follow-up isn't lost.",
+    "except:": "Catch the specific exceptions you expect, and log or re-raise anything else.",
+    "except Exception:": "Catch the specific exceptions you expect, and log or re-raise anything else.",
+    "console.log": "Remove the debug log, or route it through the project's logger at debug level.",
+    "timeout": "Set an explicit timeout on the call and handle the timeout error path.",
+    "AbortSignal": "Keep the AbortSignal wired through so the request can be cancelled.",
+}
+
+# How each level judges the rule-based patterns. A pattern maps to (severity, confidence) or to
+# None to let it go. Missing patterns use the default in _RISK_PATTERNS (the mid-level bar).
+#
+# Intern: a gentler bar. Nitpicks pass, and only egregious things (eval/exec/DROP TABLE) stay red.
+# Staff: a stricter bar aimed at design. Implementation trivia (TODOs, debug logs) passes, swallowed
+# errors and secrets in code are treated as costly decisions (red), and missing guards stay yellow
+# but cost more HP.
+_LEVEL_OVERRIDES: dict[str, dict[str, tuple[str, float] | None]] = {
+    "intern": {
+        "TODO": None,
+        "console.log": None,
+        "except Exception:": None,
+        "except:": ("yellow", 0.4),
+        "password": ("yellow", 0.4),
+        "timeout": ("yellow", 0.45),
+        "AbortSignal": ("yellow", 0.45),
+    },
+    "staff": {
+        "TODO": None,
+        "console.log": None,
+        "except:": ("red", 0.75),
+        "except Exception:": ("yellow", 0.6),
+        "password": ("red", 0.8),
+        "timeout": ("yellow", 0.9),
+        "AbortSignal": ("yellow", 0.9),
+    },
+}
+
 _LEVEL_RE = re.compile(r"^EXPLANATION LEVEL:\s*(\w+)", re.MULTILINE)
 
 # Extra teaching sentences for the intern level, keyed by finding category.
@@ -195,7 +238,15 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
     # issue (e.g. drop a timeout while adding an eval()), and the worse one must win.
     best: RefereeVerdict | None = None
 
+    overrides = _LEVEL_OVERRIDES.get(level, {})
+
     for pattern, category, severity, confidence, needs_investigation in _RISK_PATTERNS:
+        if pattern in overrides:
+            override = overrides[pattern]
+            if override is None:
+                continue
+            severity, confidence = override
+
         if pattern in added_text:
             candidate = RefereeVerdict(
                 offence=True,
@@ -208,6 +259,7 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
                     mid=f"Detected potential {category} issue: pattern '{pattern}' found in the outgoing diff.",
                     staff=f"{category.capitalize()}: '{pattern}' added.",
                 ),
+                suggested_fix=_FIXES.get(pattern, ""),
                 roast=_roast_for(category, severity),
                 needs_investigation=needs_investigation,
                 investigation_reason=f"Added line contains '{pattern}'.",
@@ -219,20 +271,34 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
             candidate = RefereeVerdict(
                 offence=True,
                 category="reliability",
-                severity="yellow",
-                confidence=0.55,
+                severity=severity if pattern in overrides else "yellow",
+                confidence=confidence if pattern in overrides else 0.55,
                 explanation=_at_level(
                     level,
                     "reliability",
                     mid=f"A line containing '{pattern}' was removed from the diff, which may drop a safety guard.",
                     staff=f"Removes '{pattern}' guard.",
                 ),
+                suggested_fix=f"Restore the '{pattern}' guard, or point to where it is still enforced.",
                 roast=_roast_for("reliability", "yellow"),
                 needs_investigation=True,
                 investigation_reason=f"Removed guard containing '{pattern}'; verify callers still enforce it.",
             )
             if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
                 best = candidate
+
+    if level == "staff" and re.search(r"^\+\s*global\s+\w+", added_text, re.MULTILINE):
+        candidate = RefereeVerdict(
+            offence=True,
+            category="design",
+            severity="yellow",
+            confidence=0.6,
+            explanation="Design: shared mutable state via `global`.",
+            suggested_fix="Pass the state in explicitly or wrap it in an object with a clear owner.",
+            roast="Global state: because every codebase needs a haunted room.",
+        )
+        if best is None or _SEVERITY_RANK[candidate.severity] > _SEVERITY_RANK[best.severity]:
+            best = candidate
 
     if best is not None:
         return best
