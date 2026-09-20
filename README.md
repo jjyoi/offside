@@ -14,7 +14,7 @@ cli/       Python CLI + git pre-push hook installer
 
 ## Setup
 
-Requires Python 3.11+, Node 18+, and `uv` (or `pip`).
+Requires Python 3.11+, Node 20.19+ (or 22.12+), and `uv` (or `pip`). **Step-by-step install, connecting a repo, usage and troubleshooting are in [SETUP.md](SETUP.md).**
 
 ```sh
 # Backend
