@@ -3,6 +3,7 @@ import json
 import pytest
 
 from offside import prefs
+from offside.hook import InstallResult
 from offside.__main__ import cmd_config
 
 
@@ -69,7 +70,7 @@ def test_install_prompts_once(monkeypatch, capsys):
 
     from offside import __main__ as cli
 
-    monkeypatch.setattr(cli, "install_hook", lambda: "/tmp/hook")
+    monkeypatch.setattr(cli, "install_hook", lambda shared=False: InstallResult("/tmp/hook", "local", False))
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda _: "2")
     cli.cmd_install()
@@ -87,7 +88,7 @@ def test_install_skips_prompt_without_tty(monkeypatch):
 
     from offside import __main__ as cli
 
-    monkeypatch.setattr(cli, "install_hook", lambda: "/tmp/hook")
+    monkeypatch.setattr(cli, "install_hook", lambda shared=False: InstallResult("/tmp/hook", "local", False))
     monkeypatch.setattr(sys.stdin, "isatty", lambda: False)
     cli.cmd_install()
     assert not prefs.is_set("level")
