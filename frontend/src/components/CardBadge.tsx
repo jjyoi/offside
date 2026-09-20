@@ -7,13 +7,13 @@ import { playCardStamp, playWhistle } from "../lib/sound";
 
 const LABELS: Record<Severity, string> = {
   play_on: "PLAY ON",
-  yellow: "YELLOW CARD",
-  red: "RED CARD — SLOP DETECTED",
+  yellow: "YELLOW CARD!",
+  red: "RED CARD — SLOP DETECTED!!!",
 };
 
 const SLAP_CAPTIONS: Partial<Record<Severity, string>> = {
-  yellow: "YELLOW CARD",
-  red: "RED CARD",
+  yellow: "YELLOW CARD!",
+  red: "RED CARD!!!",
 };
 
 const SLAP_DURATION_MS = 2000;

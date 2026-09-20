@@ -101,6 +101,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
     return total + (revealedIds.has(finding.id) && !overturned ? finding.hp_delta : 0);
   }, 0));
   const allRevealed = session.findings.every((finding) => revealedIds.has(finding.id));
+  const playerName = session.author || "YOU";
 
   return (
     <div className="review-page">
@@ -155,7 +156,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                   appealPending={pendingAppealFindingId === finding.id}
                   appealSubmitted={submittedAppealFindingIds.has(finding.id)}
                   reviewFinished={isTerminal || continuing}
-                  playerName={session.author}
+                  playerName={playerName}
                   onContest={handleContest}
                 />
               );
@@ -195,8 +196,10 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
           <BookingsTracker
             findings={session.findings}
             appeals={session.appeals}
-            playerName={session.author}
+            playerName={playerName}
             revealedIds={revealedIds}
+            activeId={currentFinding?.id}
+            onSelect={(index) => { setSkip(false); setActiveIndex(index); }}
           />
         </>
       )}

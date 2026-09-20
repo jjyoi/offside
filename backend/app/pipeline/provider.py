@@ -64,22 +64,35 @@ class BasetenProvider(ModelProvider):
     def __init__(self, model_id: str, api_key: str, base_url: str | None = None, label: str = "baseten") -> None:
         self.model_id = model_id
         self.name = label
-        self._client = AsyncOpenAI(api_key=api_key, base_url=base_url or "https://inference.baseten.co/v1")
+        self._client = AsyncOpenAI(
+            api_key=api_key, base_url=base_url or "https://inference.baseten.co/v1", timeout=25.0, max_retries=1
+        )
 
     async def complete(self, system: str, prompt: str) -> ModelResult:
         start = time.perf_counter()
-        response = await self._client.chat.completions.create(
-            model=self.model_id,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
-            top_p=1,
-            max_tokens=1000,
-            temperature=0.2,
-            presence_penalty=0,
-            frequency_penalty=0,
-        )
+        try:
+            response = await self._client.chat.completions.create(
+                model=self.model_id,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": prompt},
+                ],
+                top_p=1,
+                max_tokens=1000,
+                temperature=0.2,
+                presence_penalty=0,
+                frequency_penalty=0,
+            )
+        except Exception as exc:  # noqa: BLE001 — any provider failure must fail open, never hang the review
+            latency_ms = (time.perf_counter() - start) * 1000
+            verdict = RefereeVerdict(
+                offence=False,
+                severity="play_on",
+                confidence=0.0,
+                explanation=f"VAR unavailable ({exc.__class__.__name__}) — failing open per spec fallback policy.",
+                roast="The ref's earpiece cut out. Play on.",
+            )
+            return ModelResult(verdict=verdict, latency_ms=latency_ms, model_name=self.name, raw="")
 
         text = response.choices[0].message.content or ""
         latency_ms = (time.perf_counter() - start) * 1000
