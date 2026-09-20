@@ -5,6 +5,8 @@ export type ReviewStatus =
   | "approved"
   | "blocked";
 
+export type ExplanationLevel = "intern" | "mid" | "staff";
+
 export type Severity = "play_on" | "yellow" | "red";
 
 export type EvidenceType = "test" | "lint" | "repo_context" | "git_history" | "runtime";

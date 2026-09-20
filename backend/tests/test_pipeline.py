@@ -120,3 +120,21 @@ async def test_overturned_finding_stays_visible_and_stops_blocking(patched_store
     assert result.findings[0].id == finding_id
     assert result.hp_after == result.hp_before  # HP fully restored
     assert result.status == ReviewStatus.approved  # no longer blocks
+
+
+@pytest.mark.parametrize("level,check", [
+    ("staff", lambda t: len(t) < 60),
+    ("mid", lambda t: "Detected potential" in t),
+    ("intern", lambda t: "Detected potential" in t and len(t) > 200),
+])
+async def test_explanation_depth_follows_level(patched_store, level, check):
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=RED_DIFF, level=level)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+    assert check(patched_store.get(session.id).findings[0].explanation)
+
+
+def test_level_defaults_to_mid_and_rejects_unknown():
+    assert ReviewSession(repo="r", branch="b", local_sha="s", diff="").level.value == "mid"
+    with pytest.raises(ValueError):
+        ReviewSession(repo="r", branch="b", local_sha="s", diff="", level="wizard")

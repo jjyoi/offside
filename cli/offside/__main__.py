@@ -8,7 +8,7 @@ import webbrowser
 
 import httpx
 
-from offside import config, git_info
+from offside import config, git_info, prefs
 from offside.hook import install_hook
 
 
@@ -18,6 +18,10 @@ def main() -> None:
 
     subparsers.add_parser("install", help="Install the pre-push hook into the current repo")
 
+    config_cmd = subparsers.add_parser("config", help="View or change Offside settings")
+    config_cmd.add_argument("key", nargs="?", help="Setting name (e.g. level)")
+    config_cmd.add_argument("value", nargs="?", help="New value; omit to show the current one")
+
     pre_push = subparsers.add_parser("pre-push", help="Invoked by the git pre-push hook")
     pre_push.add_argument("remote_name", nargs="?", default="")
     pre_push.add_argument("remote_url", nargs="?", default="")
@@ -26,13 +30,63 @@ def main() -> None:
 
     if args.command == "install":
         cmd_install()
+    elif args.command == "config":
+        sys.exit(cmd_config(args.key, args.value))
     elif args.command == "pre-push":
         cmd_pre_push()
+
+
+LEVEL_CHOICES = {
+    "1": ("intern", "full walkthrough, concepts explained"),
+    "2": ("mid", "what's wrong and why it matters"),
+    "3": ("staff", "one terse line"),
+}
+
+
+def prompt_for_level(input_fn=None) -> str:
+    """Ask which explanation level the user wants. Empty or invalid input keeps the default."""
+    input_fn = input_fn or input
+    print("How much explanation do you want?")
+    for key, (name, blurb) in LEVEL_CHOICES.items():
+        print(f"  {key}) {name}: {blurb}")
+    default = prefs.DEFAULTS["level"]
+    try:
+        answer = input_fn(f"Choose 1-3 [{default}]: ").strip().lower()
+    except EOFError:
+        return default
+    if answer in LEVEL_CHOICES:
+        return LEVEL_CHOICES[answer][0]
+    if answer in prefs.LEVELS:
+        return answer
+    return default
 
 
 def cmd_install() -> None:
     path = install_hook()
     print(f"Offside pre-push hook installed at {path}")
+
+    # Only ask once per person, and only when someone is there to answer.
+    if not prefs.is_set("level") and sys.stdin.isatty():
+        level = prompt_for_level()
+        prefs.set_value("level", level)
+        print(f"Explanation level set to {level}. Change it any time with `offside config level <intern|mid|staff>`.")
+
+
+def cmd_config(key: str | None, value: str | None) -> int:
+    if key is None:
+        for k, v in prefs.load().items():
+            print(f"{k} = {v}")
+        return 0
+    try:
+        if value is None:
+            print(prefs.get(key))
+        else:
+            prefs.set_value(key, value)
+            print(f"{key} = {value}")
+    except (KeyError, ValueError) as exc:
+        print(f"offside: {exc if isinstance(exc, ValueError) else f'Unknown setting {key!r}'}", file=sys.stderr)
+        return 2
+    return 0
 
 
 def cmd_pre_push() -> None:
@@ -41,6 +95,9 @@ def cmd_pre_push() -> None:
     if not refs:
         print("Offside: no refs to push, allowing.")
         sys.exit(0)
+
+    if not prefs.is_set("level"):
+        print("Offside: explanation level is mid. Change it with `offside config level <intern|mid|staff>`.")
 
     repo_root = git_info.repo_root()
     repo_slug = git_info.current_repo_slug()
@@ -75,6 +132,7 @@ def review_one(repo_slug: str, repo_root: str, push_range: git_info.PushRange) -
                     "commits": push_range.commits,
                     "repo_path": repo_root,
                     "author": push_range.author,
+                    "level": prefs.get("level"),
                 },
             )
             resp.raise_for_status()

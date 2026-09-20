@@ -112,10 +112,11 @@ class RuleBasedProvider(ModelProvider):
 
     async def complete(self, system: str, prompt: str) -> ModelResult:
         start = time.perf_counter()
+        level = _level_from_prompt(prompt)
         if "DEVELOPER'S APPEAL:" in prompt:
-            verdict = _heuristic_appeal_verdict(prompt)
+            verdict = _heuristic_appeal_verdict(prompt, level)
         else:
-            verdict = _heuristic_verdict(prompt)
+            verdict = _heuristic_verdict(prompt, level)
         latency_ms = (time.perf_counter() - start) * 1000
         return ModelResult(verdict=verdict, latency_ms=latency_ms, model_name=self.name, raw=json.dumps(verdict.model_dump()))
 
@@ -155,8 +156,42 @@ _RISK_PATTERNS = [
 
 _SEVERITY_RANK = {"red": 2, "yellow": 1, "play_on": 0}
 
+_LEVEL_RE = re.compile(r"^EXPLANATION LEVEL:\s*(\w+)", re.MULTILINE)
 
-def _heuristic_verdict(prompt: str) -> RefereeVerdict:
+# Extra teaching sentences for the intern level, keyed by finding category.
+_INTERN_NOTES = {
+    "security": (
+        "Security bugs matter because attackers look for exactly this kind of shortcut. "
+        "Prefer a safe, well-known API over building or running code from strings, and never trust user input."
+    ),
+    "reliability": (
+        "Reliability guards such as timeouts and error handling keep one slow or failing call from taking down "
+        "everything around it. Check that something else still enforces the safeguard before removing it."
+    ),
+    "maintainability": (
+        "Code that is hard to follow costs the team time later. Finish the work, or file a ticket "
+        "so the follow-up doesn't get lost."
+    ),
+}
+_INTERN_DEFAULT_NOTE = "Take a moment to check the surrounding code and confirm this does what you intend."
+
+
+def _level_from_prompt(prompt: str) -> str:
+    match = _LEVEL_RE.search(prompt)
+    level = match.group(1).lower() if match else "mid"
+    return level if level in {"intern", "mid", "staff"} else "mid"
+
+
+def _at_level(level: str, category: str, mid: str, staff: str) -> str:
+    """Pick the explanation depth for the rule-based referee."""
+    if level == "staff":
+        return staff
+    if level == "intern":
+        return f"{mid} {_INTERN_NOTES.get(category, _INTERN_DEFAULT_NOTE)}"
+    return mid
+
+
+def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
     lowered_lines = [ln for ln in prompt.splitlines() if ln.startswith("+")]
     removed_lines = [ln for ln in prompt.splitlines() if ln.startswith("-") and not ln.startswith("---")]
     added_text = "\n".join(lowered_lines)
@@ -174,7 +209,12 @@ def _heuristic_verdict(prompt: str) -> RefereeVerdict:
                 category=category,
                 severity=severity,
                 confidence=confidence,
-                explanation=f"Detected potential {category} issue: pattern '{pattern}' found in the outgoing diff.",
+                explanation=_at_level(
+                    level,
+                    category,
+                    mid=f"Detected potential {category} issue: pattern '{pattern}' found in the outgoing diff.",
+                    staff=f"{category.capitalize()}: '{pattern}' added.",
+                ),
                 roast=_roast_for(category, severity),
                 needs_investigation=needs_investigation,
                 investigation_reason=f"Added line contains '{pattern}'.",
@@ -188,7 +228,12 @@ def _heuristic_verdict(prompt: str) -> RefereeVerdict:
                 category="reliability",
                 severity="yellow",
                 confidence=0.55,
-                explanation=f"A line containing '{pattern}' was removed from the diff, which may drop a safety guard.",
+                explanation=_at_level(
+                    level,
+                    "reliability",
+                    mid=f"A line containing '{pattern}' was removed from the diff, which may drop a safety guard.",
+                    staff=f"Removes '{pattern}' guard.",
+                ),
                 roast=_roast_for("reliability", "yellow"),
                 needs_investigation=True,
                 investigation_reason=f"Removed guard containing '{pattern}'; verify callers still enforce it.",
@@ -209,7 +254,7 @@ def _heuristic_verdict(prompt: str) -> RefereeVerdict:
     )
 
 
-def _heuristic_appeal_verdict(prompt: str) -> RefereeVerdict:
+def _heuristic_appeal_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
     """Judges an appeal prompt (ORIGINAL FINDING / DEVELOPER'S APPEAL / NEW EVIDENCE sections).
 
     Conservative by design: overturning requires evidence whose summary text actually
@@ -250,8 +295,13 @@ def _heuristic_appeal_verdict(prompt: str) -> RefereeVerdict:
             category=category,
             severity="play_on",
             confidence=0.75,
-            explanation="New evidence corroborates the developer's claim: comparable call sites "
-            "and/or callers confirm the safeguard the developer described is present.",
+            explanation=_at_level(
+                level,
+                category,
+                mid="New evidence corroborates the developer's claim: comparable call sites "
+                "and/or callers confirm the safeguard the developer described is present.",
+                staff="Evidence backs the claim.",
+            ),
             roast="Fair cop, ref got it wrong. Play on.",
         )
 
@@ -260,8 +310,13 @@ def _heuristic_appeal_verdict(prompt: str) -> RefereeVerdict:
         category=category,
         severity=original_severity,
         confidence=0.7,
-        explanation="The new evidence gathered does not corroborate the developer's claim. "
-        "No caller or repository context was found that supports the stated safeguard.",
+        explanation=_at_level(
+            level,
+            category,
+            mid="The new evidence gathered does not corroborate the developer's claim. "
+            "No caller or repository context was found that supports the stated safeguard.",
+            staff="No evidence backs the claim.",
+        ),
         roast="Nice try, but VAR isn't buying it without receipts.",
     )
 

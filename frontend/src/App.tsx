@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ReviewPage } from "./pages/ReviewPage";
+import { SettingsButton } from "./components/SettingsButton";
 import { WHISTLE_GIF } from "./lib/gifs";
 import "./App.css";
 
@@ -11,6 +12,7 @@ function Home() {
         <h1 className="poster-title">Nothing to review</h1>
         <p>Offside is running. Push something to trigger a review.</p>
         <code className="chip">git push</code>
+        <SettingsButton align="center" />
       </div>
     </div>
   );
