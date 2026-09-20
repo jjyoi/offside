@@ -25,6 +25,12 @@ interface Props {
 
 const STAGE_ORDER: Stage[] = ["diff", "explanation", "evidence", "roast", "verdict"];
 
+const NEXT_LABEL = {
+  explanation: "Show the evidence",
+  evidence: "Hear the roast",
+  roast: "See the verdict",
+};
+
 const fadeUp = {
   initial: { opacity: 0, y: 8 },
   animate: { opacity: 1, y: 0 },
@@ -67,11 +73,23 @@ export function FindingReview({
 
   const advance = () => setStageIndex((i) => Math.min(i + 1, STAGE_ORDER.length - 1));
 
+  // The diff replay advances itself; after that the reader sets the pace so longer
+  // explanations don't flash past. Enter, Space or the right arrow also step forward.
+  const waitingForReader = !skip && (stage === "explanation" || stage === "evidence" || stage === "roast");
+
   useEffect(() => {
-    if (stage === "diff" || stage === "verdict" || skip) return;
-    const timer = setTimeout(advance, stage === "explanation" ? 700 : stage === "evidence" ? 700 : 500);
-    return () => clearTimeout(timer);
-  }, [stage, skip]);
+    if (!waitingForReader) return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest("input, textarea, select, button, a, [contenteditable]")) return;
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowRight") {
+        e.preventDefault();
+        advance();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [waitingForReader]);
 
   useEffect(() => {
     if (stage === "verdict") onVerdict(finding.id);
@@ -123,6 +141,15 @@ export function FindingReview({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {waitingForReader && (
+        <div className="step-bar">
+          <button type="button" className="btn btn-next" onClick={advance} autoFocus>
+            {NEXT_LABEL[stage as "explanation" | "evidence" | "roast"]}
+          </button>
+          <span className="step-hint">or press Enter</span>
+        </div>
+      )}
 
       {stageIndex >= 4 && (
         <motion.div

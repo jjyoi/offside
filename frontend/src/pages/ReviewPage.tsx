@@ -6,6 +6,7 @@ import { FindingReview } from "../components/FindingReview";
 import { CardBadge } from "../components/CardBadge";
 import { HpBar } from "../components/HpBar";
 import { BookingsTracker } from "../components/BookingsTracker";
+import { FindingsOverview } from "../components/FindingsOverview";
 import { SettingsButton } from "../components/SettingsButton";
 import { submitAppeal, continuePush } from "../lib/api";
 
@@ -101,6 +102,8 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
     const overturned = session.appeals.some((appeal) => appeal.finding_id === finding.id && appeal.outcome === "overturned");
     return total + (revealedIds.has(finding.id) && !overturned ? finding.hp_delta : 0);
   }, 0));
+  const isLast = activeIndex >= session.findings.length - 1;
+  const currentRevealed = currentFinding ? revealedIds.has(currentFinding.id) : false;
   const allRevealed = session.findings.every((finding) => revealedIds.has(finding.id));
   const playerName = session.author || "YOU";
 
@@ -143,6 +146,19 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
             </div>
           )}
 
+          <FindingsOverview
+            findings={session.findings}
+            appeals={session.appeals}
+            activeIndex={activeIndex}
+            revealedIds={revealedIds}
+            onSelect={(index) => {
+              // Jumping ahead means the ones skipped over are accepted as read.
+              session.findings.slice(0, index).forEach((f) => handleVerdict(f.id));
+              setSkip(false);
+              setActiveIndex(index);
+            }}
+          />
+
           <div className="findings-list">
             {session.findings.slice(activeIndex, activeIndex + 1).map((finding) => {
               const appeal = session.appeals.find((a) => a.finding_id === finding.id);
@@ -171,15 +187,22 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                 Previous issue
               </button>
               <span>Issue {activeIndex + 1} of {session.findings.length}</span>
-              <button className="btn" disabled={!revealedIds.has(currentFinding.id) || activeIndex >= session.findings.length - 1}
-                onClick={() => { setSkip(false); setActiveIndex((index) => index + 1); }}>
-                Next issue
+              <button className="btn" disabled={isLast && currentRevealed}
+                onClick={() => {
+                  // "Yeah, we get it": count this call as seen and move on, contested or not.
+                  handleVerdict(currentFinding.id);
+                  if (!isLast) { setSkip(false); setActiveIndex((index) => index + 1); }
+                }}>
+                {isLast && !currentRevealed ? "Skip to verdict" : "Next issue"}
               </button>
             </nav>
           )}
 
           {!isReviewing && !isTerminal && allRevealed && (
             <div className="continue-bar">
+              {hasUnresolvedRed && (
+                <p className="continue-note">A red card stops the push. Contest it above, or accept the call.</p>
+              )}
               <button className={`btn ${hasUnresolvedRed ? "btn-block" : "btn-continue"}`} onClick={handleContinue} disabled={continuing || appealInProgress}>
                 {continuing ? "Finishing review..." : appealInProgress ? "Waiting for appeal..." : hasUnresolvedRed ? "Accept verdict / Block push" : "Continue Push"}
               </button>
