@@ -81,7 +81,9 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
                 "check.completed",
                 {"check": "deep_review", "file": hunk.file, "model": deep_result.model_name, "latency_ms": round(deep_result.latency_ms, 1)},
             )
+            fast_fix = verdict.suggested_fix
             verdict = deep_result.verdict if deep_result.verdict.offence else verdict
+            verdict.suggested_fix = verdict.suggested_fix or fast_fix
 
         if verdict.severity == "play_on":
             continue
@@ -95,6 +97,7 @@ async def run_review(session_id: str, repo_path: str | None) -> None:
             severity=severity,
             confidence=verdict.confidence,
             explanation=verdict.explanation,
+            suggested_fix=verdict.suggested_fix,
             roast=verdict.roast,
             hp_delta=hp_delta_for(severity, verdict.confidence),
             evidence=evidence,
@@ -232,7 +235,7 @@ Don't wait for a specific keyword to trigger; form your own opinion on every hun
 
 Respond ONLY with compact JSON matching this schema: {"offence": bool, "category": str, \
 "severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, "start_line": int, "end_line": int, \
-"explanation": str, "roast": str, "needs_investigation": bool, "investigation_reason": str}. \
+"explanation": str, "suggested_fix": str, "roast": str, "needs_investigation": bool, "investigation_reason": str}. \
 Set needs_investigation=true when you suspect slop but can't confirm from the diff alone (e.g. need to check \
 callers, tests, or history to know if it's actually a problem). Be terse and specific — call out exactly what \
 about it reads as slop, not a generic warning."""
@@ -242,7 +245,7 @@ _DEEP_SYSTEM_PROMPT = """You are the deep-review judge. You receive a diff hunk 
 checks — the question is whether this is genuinely careless/slop code or just looked suspicious out of context. \
 Produce a final verdict as compact JSON matching: {"offence": bool, "category": str, \
 "severity": "play_on"|"yellow"|"red", "confidence": float 0-1, "file": str, "start_line": int, "end_line": int, \
-"explanation": str, "roast": str, "needs_investigation": false, "investigation_reason": ""}. \
+"explanation": str, "suggested_fix": str, "roast": str, "needs_investigation": false, "investigation_reason": ""}. \
 The explanation must reference the evidence provided. Never invent evidence. Be willing to soften or clear a \
 verdict if the evidence explains it — you're not trying to maximize red cards, you're trying to be right."""
 
@@ -260,7 +263,7 @@ whether the evidence and explanation together support the developer's claim (off
 to overturn, or downgrade red to yellow if it's a partial justification) or clearly contradict it (keep \
 offence=true and the original severity to uphold — reserve this for cases with real contradicting evidence). \
 Respond ONLY with compact JSON matching: {"offence": bool, "category": str, "severity": "play_on"|"yellow"|"red", \
-"confidence": float 0-1, "file": str, "start_line": int, "end_line": int, "explanation": str, "roast": str, \
+"confidence": float 0-1, "file": str, "start_line": int, "end_line": int, "explanation": str, "suggested_fix": str, "roast": str, \
 "needs_investigation": false, "investigation_reason": ""}. The explanation must state what the new evidence \
 showed and why it does or doesn't support the developer."""
 
@@ -282,7 +285,11 @@ _LEVEL_INSTRUCTIONS = {
 
 def level_instruction(level: ExplanationLevel) -> str:
     """Appended to each system prompt so `explanation` is written at the reader's depth."""
-    return f"\n\nEXPLANATION DEPTH: {_LEVEL_INSTRUCTIONS[level]}"
+    return (
+        f"\n\nEXPLANATION DEPTH: {_LEVEL_INSTRUCTIONS[level]}"
+        "\n\nSUGGESTED FIX: Put a concrete fix in `suggested_fix`: one to three sentences, with a short code "
+        "snippet if it helps. Leave it empty only when the verdict is play_on."
+    )
 
 
 def _build_fast_prompt(file: str, hunk_raw: str, level: ExplanationLevel = ExplanationLevel.mid) -> str:

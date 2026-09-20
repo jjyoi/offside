@@ -46,6 +46,11 @@ class Evidence(BaseModel):
     strength: float = Field(ge=0, le=1)
 
 
+class FixDecision(str, Enum):
+    accepted = "accepted"
+    declined = "declined"
+
+
 class Finding(BaseModel):
     id: str = Field(default_factory=lambda: new_id("finding"))
 
@@ -59,8 +64,10 @@ class Finding(BaseModel):
 
     explanation: str
     roast: str
+    suggested_fix: str = ""
 
     hp_delta: int = 0
+    fix_decision: FixDecision | None = None
 
     evidence: list[Evidence] = Field(default_factory=list)
 

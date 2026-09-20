@@ -33,6 +33,7 @@ class RefereeVerdict(BaseModel):
     start_line: int | None = None
     end_line: int | None = None
     explanation: str = ""
+    suggested_fix: str = ""
     roast: str = ""
     needs_investigation: bool = False
     investigation_reason: str = ""
@@ -156,6 +157,20 @@ _RISK_PATTERNS = [
 
 _SEVERITY_RANK = {"red": 2, "yellow": 1, "play_on": 0}
 
+# Concrete fixes the rule-based referee can suggest, keyed by the pattern that tripped it.
+_FIXES = {
+    "eval(": "Replace eval() with ast.literal_eval() for data, or parse the input explicitly. Never execute strings.",
+    "exec(": "Remove exec(). Call the function you need directly, or dispatch through a dict of allowed handlers.",
+    "DROP TABLE": "Move the schema change into a reviewed migration and never build DDL from strings at runtime.",
+    "password": "Load the secret from an environment variable or secrets manager and compare with hmac.compare_digest().",
+    "TODO": "Finish the work now, or open a ticket and reference it in the comment so the follow-up isn't lost.",
+    "except:": "Catch the specific exceptions you expect, and log or re-raise anything else.",
+    "except Exception:": "Catch the specific exceptions you expect, and log or re-raise anything else.",
+    "console.log": "Remove the debug log, or route it through the project's logger at debug level.",
+    "timeout": "Set an explicit timeout on the call and handle the timeout error path.",
+    "AbortSignal": "Keep the AbortSignal wired through so the request can be cancelled.",
+}
+
 _LEVEL_RE = re.compile(r"^EXPLANATION LEVEL:\s*(\w+)", re.MULTILINE)
 
 # Extra teaching sentences for the intern level, keyed by finding category.
@@ -215,6 +230,7 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
                     mid=f"Detected potential {category} issue: pattern '{pattern}' found in the outgoing diff.",
                     staff=f"{category.capitalize()}: '{pattern}' added.",
                 ),
+                suggested_fix=_FIXES.get(pattern, ""),
                 roast=_roast_for(category, severity),
                 needs_investigation=needs_investigation,
                 investigation_reason=f"Added line contains '{pattern}'.",
@@ -234,6 +250,7 @@ def _heuristic_verdict(prompt: str, level: str = "mid") -> RefereeVerdict:
                     mid=f"A line containing '{pattern}' was removed from the diff, which may drop a safety guard.",
                     staff=f"Removes '{pattern}' guard.",
                 ),
+                suggested_fix=f"Restore the '{pattern}' guard, or point to where it is still enforced.",
                 roast=_roast_for("reliability", "yellow"),
                 needs_investigation=True,
                 investigation_reason=f"Removed guard containing '{pattern}'; verify callers still enforce it.",
