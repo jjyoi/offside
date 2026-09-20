@@ -9,6 +9,8 @@ interface Props {
 }
 
 function statusFor(finding: Finding, appeals: Appeal[], revealed: boolean): string {
+  if (finding.fix_decision === "accepted") return "Fix accepted";
+  if (finding.fix_decision === "declined") return "Conceded";
   const appeal = appeals.find((a) => a.finding_id === finding.id);
   if (appeal?.outcome === "overturned") return "Overturned";
   if (appeal?.outcome === "stands") return "Stands";

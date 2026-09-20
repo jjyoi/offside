@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import type { Appeal, Finding } from "../lib/types";
+import type { Appeal, Finding, FixDecision } from "../lib/types";
 import { DiffReplay } from "./DiffReplay";
 import { CardBadge } from "./CardBadge";
 import { EvidenceList } from "./EvidenceList";
@@ -21,6 +21,7 @@ interface Props {
   playerName?: string | null;
   onVerdict: (findingId: string) => void;
   onContest: (findingId: string, text: string) => void;
+  onFixDecision: (findingId: string, decision: FixDecision) => void;
 }
 
 const STAGE_ORDER: Stage[] = ["diff", "explanation", "evidence", "roast", "verdict"];
@@ -48,6 +49,7 @@ export function FindingReview({
   reviewFinished,
   playerName,
   onContest,
+  onFixDecision,
   onVerdict,
 }: Props) {
   const [resolvedOnMount] = useState(Boolean(receivedAppeal?.outcome));
@@ -195,7 +197,32 @@ export function FindingReview({
             </div>
           )}
 
-          {finding.severity !== "play_on" && !reviewFinished && !appeal && !appealSubmitted && (
+          {finding.severity !== "play_on" && !overturned && finding.suggested_fix && (
+            <div className="suggested-fix">
+              <span className="eyebrow">Suggested fix</span>
+              <p>{finding.suggested_fix}</p>
+              {finding.fix_decision === "accepted" && (
+                <p className="fix-status fix-status-accepted">
+                  Fix accepted. It isn't part of this push, so apply it next. The terminal will list it.
+                </p>
+              )}
+              {finding.fix_decision === "declined" && (
+                <p className="fix-status fix-status-declined">Conceded with no fix agreed. The push is stopped.</p>
+              )}
+              {!finding.fix_decision && !reviewFinished && (
+                <div className="fix-actions">
+                  <button type="button" className="btn btn-continue" onClick={() => onFixDecision(finding.id, "accepted")}>
+                    Accept fix
+                  </button>
+                  <button type="button" className="btn" onClick={() => onFixDecision(finding.id, "declined")}>
+                    Concede, no fix (stops push)
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {finding.severity !== "play_on" && !reviewFinished && !appeal && !appealSubmitted && !finding.fix_decision && (
             <AppealForm onSubmit={(text) => onContest(finding.id, text)} disabled={appealPending} />
           )}
 

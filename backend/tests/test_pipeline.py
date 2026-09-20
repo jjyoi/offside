@@ -138,3 +138,10 @@ def test_level_defaults_to_mid_and_rejects_unknown():
     assert ReviewSession(repo="r", branch="b", local_sha="s", diff="").level.value == "mid"
     with pytest.raises(ValueError):
         ReviewSession(repo="r", branch="b", local_sha="s", diff="", level="wizard")
+
+
+async def test_rule_based_findings_carry_a_suggested_fix(patched_store):
+    session = ReviewSession(repo="r", branch="b", local_sha="s", diff=RED_DIFF)
+    await patched_store.create(session)
+    await run_review(session.id, repo_path=None)
+    assert patched_store.get(session.id).findings[0].suggested_fix

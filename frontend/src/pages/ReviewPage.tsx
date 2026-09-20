@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import type { FixDecision } from "../lib/types";
 import { useParams } from "react-router-dom";
 import { useReviewSession } from "../hooks/useReviewSession";
 import { VarIntro } from "../components/VarIntro";
@@ -8,7 +9,7 @@ import { HpBar } from "../components/HpBar";
 import { BookingsTracker } from "../components/BookingsTracker";
 import { FindingsOverview } from "../components/FindingsOverview";
 import { SettingsButton } from "../components/SettingsButton";
-import { submitAppeal, continuePush } from "../lib/api";
+import { submitAppeal, continuePush, decideFix } from "../lib/api";
 
 export function ReviewPage() {
   const { sessionId = "" } = useParams();
@@ -74,6 +75,14 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
     }
   };
 
+  const handleFixDecision = async (findingId: string, decision: FixDecision) => {
+    try {
+      await decideFix(sessionId, findingId, decision);
+    } catch {
+      // The session refetches on events; a failed call just leaves the buttons available to retry.
+    }
+  };
+
   const handleContinue = async () => {
     setContinuing(true);
     setCompletionError(null);
@@ -94,7 +103,10 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
     (id) => !session.appeals.some((appeal) => appeal.finding_id === id && appeal.outcome),
   );
   const hasUnresolvedRed = session.findings.some(
-    (f) => f.severity === "red" && !session.appeals.some((a) => a.finding_id === f.id && a.outcome === "overturned"),
+    (f) =>
+      f.severity === "red" &&
+      f.fix_decision !== "accepted" &&
+      !session.appeals.some((a) => a.finding_id === f.id && a.outcome === "overturned"),
   );
 
   const currentFinding = session.findings[activeIndex];
@@ -176,6 +188,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                   reviewFinished={isTerminal || continuing}
                   playerName={playerName}
                   onContest={handleContest}
+                  onFixDecision={handleFixDecision}
                 />
               );
             })}
@@ -201,7 +214,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
           {!isReviewing && !isTerminal && allRevealed && (
             <div className="continue-bar">
               {hasUnresolvedRed && (
-                <p className="continue-note">A red card stops the push. Contest it above, or accept the call.</p>
+                <p className="continue-note">A red card stops the push. Contest it, accept its fix, or concede.</p>
               )}
               <button className={`btn ${hasUnresolvedRed ? "btn-block" : "btn-continue"}`} onClick={handleContinue} disabled={continuing || appealInProgress}>
                 {continuing ? "Finishing review..." : appealInProgress ? "Waiting for appeal..." : hasUnresolvedRed ? "Accept verdict / Block push" : "Continue Push"}

@@ -180,13 +180,22 @@ def wait_for_verdict(session_id: str, review_url: str) -> int:
 
 def _print_result(session: dict, blocked: bool) -> None:
     hp = session.get("hp_after", 100)
+    findings = session.get("findings", [])
     if blocked:
         print(f"PUSH BLOCKED — HP {hp}")
-        for f in session.get("findings", []):
-            if f["severity"] == "red":
+        for f in findings:
+            if f["severity"] == "red" and f.get("fix_decision") != "accepted":
                 print(f"  RED CARD {f['file']}:{f['start_line']} — {f['explanation']}")
+            elif f.get("fix_decision") == "declined":
+                print(f"  CONCEDED, NO FIX AGREED {f['file']}:{f['start_line']}")
     else:
         print(f"PUSH ALLOWED — HP {hp}")
+
+    accepted = [f for f in findings if f.get("fix_decision") == "accepted" and f.get("suggested_fix")]
+    if accepted:
+        print("Fixes you accepted (not part of this push, apply them next):")
+        for f in accepted:
+            print(f"  {f['file']}:{f['start_line']} — {f['suggested_fix']}")
 
 
 def _fail_open(message: str) -> int:

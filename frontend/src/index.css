@@ -1426,3 +1426,40 @@ a {
   font-size: 0.7rem;
   color: var(--ink-faint);
 }
+
+/* ---------- suggested fix ---------- */
+
+.suggested-fix {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  background: rgba(10, 11, 13, 0.04);
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+}
+
+.suggested-fix p {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.fix-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 0.25rem;
+}
+
+.fix-status {
+  font-weight: 600;
+}
+
+.fix-status-accepted {
+  color: var(--green);
+}
+
+.fix-status-declined {
+  color: var(--red);
+}

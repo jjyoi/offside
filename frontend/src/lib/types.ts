@@ -7,6 +7,8 @@ export type ReviewStatus =
 
 export type ExplanationLevel = "intern" | "mid" | "staff";
 
+export type FixDecision = "accepted" | "declined";
+
 export type Severity = "play_on" | "yellow" | "red";
 
 export type EvidenceType = "test" | "lint" | "repo_context" | "git_history" | "runtime";
@@ -28,7 +30,9 @@ export interface Finding {
   confidence: number;
   explanation: string;
   roast: string;
+  suggested_fix: string;
   hp_delta: number;
+  fix_decision?: FixDecision | null;
   evidence: Evidence[];
 }
 
