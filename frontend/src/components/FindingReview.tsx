@@ -6,6 +6,7 @@ import { CardBadge } from "./CardBadge";
 import { EvidenceList } from "./EvidenceList";
 import { AppealForm } from "./AppealForm";
 import { AppealWaiting } from "./AppealWaiting";
+import { BouncingBall } from "./BouncingBall";
 
 type Stage = "diff" | "explanation" | "evidence" | "roast" | "verdict";
 
@@ -102,15 +103,20 @@ export function FindingReview({
 
   const overturned = appeal?.outcome === "overturned";
   const downgraded = appeal?.outcome === "downgraded";
+  const [ballDismissed, setBallDismissed] = useState(false);
 
   return (
     <motion.div className="finding-card" {...fadeUp}>
       <div className="finding-header">
         <span className="incident-no">Incident {String(index + 1).padStart(2, "0")}</span>
-        <span className="finding-file">
+        <a
+          className="finding-file finding-file-link"
+          href={`vscode://file/${finding.file}:${finding.start_line}`}
+          title="Open in IDE"
+        >
           {finding.file}:{finding.start_line}
           {finding.end_line !== finding.start_line ? `-${finding.end_line}` : ""}
-        </span>
+        </a>
         <span className="finding-category">{finding.category}</span>
       </div>
 
@@ -190,6 +196,8 @@ export function FindingReview({
               <p className="appeal-restored">+{Math.abs(finding.hp_delta)} HP restored.</p>
             </div>
           )}
+
+          {overturned && !ballDismissed && <BouncingBall onDismiss={() => setBallDismissed(true)} />}
 
           {downgraded && appeal && (
             <div className="appeal-result appeal-downgraded">

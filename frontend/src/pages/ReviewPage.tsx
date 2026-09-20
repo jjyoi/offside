@@ -177,6 +177,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
               session.findings.slice(0, index).forEach((f) => handleVerdict(f.id));
               setSkip(false);
               setActiveIndex(index);
+              window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           />
 
@@ -205,7 +206,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
 
           {currentFinding && (
             <nav className="finding-navigation" aria-label="Review findings">
-              <button className="btn" disabled={activeIndex === 0} onClick={() => { setSkip(false); setActiveIndex((index) => index - 1); }}>
+              <button className="btn" disabled={activeIndex === 0} onClick={() => { setSkip(false); setActiveIndex((index) => index - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
                 Previous issue
               </button>
               <span>Issue {activeIndex + 1} of {session.findings.length}</span>
@@ -214,6 +215,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
                   // "Yeah, we get it": count this call as seen and move on, contested or not.
                   handleVerdict(currentFinding.id);
                   if (!isLast) { setSkip(false); setActiveIndex((index) => index + 1); }
+                  window.scrollTo({ top: 0, behavior: "smooth" });
                 }}>
                 {isLast && !currentRevealed ? "Skip to verdict" : "Next issue"}
               </button>
@@ -241,7 +243,7 @@ function ReviewSessionPage({ sessionId }: { sessionId: string }) {
             playerName={playerName}
             revealedIds={revealedIds}
             activeId={currentFinding?.id}
-            onSelect={(index) => { setSkip(false); setActiveIndex(index); }}
+            onSelect={(index) => { setSkip(false); setActiveIndex(index); window.scrollTo({ top: 0, behavior: "smooth" }); }}
           />
         </>
       )}

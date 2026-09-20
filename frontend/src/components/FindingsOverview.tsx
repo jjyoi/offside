@@ -32,15 +32,19 @@ export function FindingsOverview({ findings, appeals, activeIndex, revealedIds, 
         {findings.map((finding, index) => {
           const revealed = revealedIds.has(finding.id);
           const status = statusFor(finding, appeals, revealed);
+          const overturned = appeals.some((a) => a.finding_id === finding.id && a.outcome === "overturned");
           return (
             <li key={finding.id}>
               <button
                 type="button"
-                className={`overview-item ${index === activeIndex ? "is-active" : ""}`}
+                className={`overview-item ${index === activeIndex ? "is-active" : ""} ${overturned ? "overview-item-overturned" : ""}`}
                 aria-current={index === activeIndex ? "step" : undefined}
                 onClick={() => onSelect(index)}
               >
-                <span className={`booking-chip booking-chip-${finding.severity}`} aria-hidden="true" />
+                <span
+                  className={`booking-chip ${revealed ? `booking-chip-${finding.severity}` : "booking-chip-pending"}`}
+                  aria-hidden="true"
+                />
                 <span className="overview-file">
                   {finding.file}:{finding.start_line}
                 </span>
