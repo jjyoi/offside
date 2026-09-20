@@ -38,23 +38,25 @@ Start the backend and the review page with one command. It waits until both are 
 ./demo.sh                  # or: ./demo.sh /path/to/repo   to also run `offside doctor` there
 ```
 
-Install the hook into any local git repo you want to protect (once per clone):
+Connect any local git repo (once per clone):
 
 ```sh
 export PATH="/path/to/offside/cli/.venv/bin:$PATH"   # only to run the `offside` command yourself
 cd /path/to/some/repo
-offside install
+offside connect
 ```
 
-Now `git push` from that repo will pause, open a browser VAR review, and allow or block the push based on the verdict. The hook records the CLI's absolute path when you install it, so pushes do not depend on your `PATH`.
+From then on a plain `git push` from that repo opens the browser VAR review and allows or blocks the push based on the verdict. `offside connect` installs the hook and sets `push.autoSetupRemote`, so `git push` also works on a brand-new branch. The hook records the CLI's absolute path, so pushes do not depend on your `PATH`.
+
+If the backend and review page are not running when you push, the hook starts them itself (stop them with `offside down`, or start them ahead of time with `offside up`). `./demo.sh` does the same in the foreground with live status, if you prefer that.
 
 ### Installing for a whole repo
 
-`offside install --shared` writes the hook to a committed `.githooks/` folder and points `core.hooksPath` at it. Commit that folder, and a teammate only needs to run `offside install` once after cloning. Git does not run repo-supplied hooks automatically, so that one step per clone is unavoidable. An existing pre-push hook is kept and still runs first.
+`offside connect --shared` writes the hook to a committed `.githooks/` folder and points `core.hooksPath` at it. Commit that folder, and a teammate only needs to run `offside connect` once after cloning. Git does not run repo-supplied hooks automatically, so that one step per clone is unavoidable. An existing pre-push hook is kept and still runs first.
 
 ### If Offside is down
 
-Pushes never fail silently. If the backend or the review page is not responding, the hook prints a boxed warning saying the push was not reviewed. By default the push then goes through (fail open); set `OFFSIDE_FAIL_OPEN=0` to block instead. Run `offside doctor` in a repo to check the backend, the review page, the hook, and your level.
+Pushes never fail silently. If the backend or the review page is not responding and can't be started, the hook prints a boxed warning saying the push was not reviewed. By default the push then goes through (fail open); set `OFFSIDE_FAIL_OPEN=0` to block instead. Run `offside doctor` in a repo to check the backend, the review page, the hook, and your level.
 
 The local hook can be skipped with `git push --no-verify`. Enforcing the review for everyone would need a required status check on the server side.
 

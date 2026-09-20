@@ -24,7 +24,7 @@ def repo(tmp_path):
 
 def run_hook(repo, extra_env=None, hooks_dir=None):
     hook_path = (Path(hooks_dir) if hooks_dir else Path(repo) / ".git" / "hooks") / "pre-push"
-    env = {**os.environ, "OFFSIDE_BACKEND_URL": CLOSED_PORT, "OFFSIDE_FRONTEND_URL": CLOSED_PORT, **(extra_env or {})}
+    env = {**os.environ, "OFFSIDE_BACKEND_URL": CLOSED_PORT, "OFFSIDE_FRONTEND_URL": CLOSED_PORT, "OFFSIDE_AUTOSTART": "0", **(extra_env or {})}
     return subprocess.run(["sh", str(hook_path), "origin", "url"], cwd=repo, input=REFS, text=True, capture_output=True, env=env)
 
 
@@ -48,7 +48,7 @@ def test_backend_down_is_loud_and_fails_open_by_default(repo):
     hook.install_hook(cwd=str(repo))
     out = run_hook(repo)
     assert out.returncode == 0
-    assert "NOT reviewed" in out.stdout and "./demo.sh" in out.stdout and "UNREVIEWED" in out.stdout
+    assert "NOT reviewed" in out.stdout and "offside up" in out.stdout and "UNREVIEWED" in out.stdout
 
 
 def test_backend_down_blocks_when_fail_open_disabled(repo):

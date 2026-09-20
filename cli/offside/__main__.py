@@ -8,7 +8,7 @@ import webbrowser
 
 import httpx
 
-from offside import config, git_info, prefs
+from offside import config, git_info, prefs, services
 from offside import hook as hook_mod
 from offside.hook import install_hook
 
@@ -24,6 +24,13 @@ def main() -> None:
         help="Put the hook in a committed .githooks/ folder so teammates only run `offside install` once per clone",
     )
 
+    connect = subparsers.add_parser(
+        "connect", help="Connect this repo to Offside: install the hook and make a plain `git push` just work"
+    )
+    connect.add_argument("--shared", action="store_true", help="Commit the hook in .githooks/ so teammates get it too")
+
+    subparsers.add_parser("up", help="Start the Offside backend and review page")
+    subparsers.add_parser("down", help="Stop the backend and review page that Offside started")
     subparsers.add_parser("doctor", help="Check that Offside is ready to review a push from this repo")
 
     config_cmd = subparsers.add_parser("config", help="View or change Offside settings")
@@ -38,6 +45,12 @@ def main() -> None:
 
     if args.command == "install":
         cmd_install(shared=args.shared)
+    elif args.command == "connect":
+        sys.exit(cmd_connect(shared=args.shared))
+    elif args.command == "up":
+        sys.exit(cmd_up())
+    elif args.command == "down":
+        sys.exit(cmd_down())
     elif args.command == "doctor":
         sys.exit(cmd_doctor())
     elif args.command == "config":
@@ -93,6 +106,38 @@ def cmd_install(shared: bool = False) -> None:
         print(f"Explanation level set to {level}. Change it any time with `offside config level <intern|mid|staff>`.")
 
 
+def cmd_connect(shared: bool = False) -> int:
+    """One step to protect a repo: install the hook and make sure a bare `git push` works."""
+    cmd_install(shared=shared)
+    # A new branch has no upstream, and plain `git push` would refuse before Offside ever ran.
+    subprocess.run(["git", "config", "--local", "push.autoSetupRemote", "true"], check=False)
+    print("Connected. From now on, `git push` in this repo opens the Offside review by itself.")
+    blocker = services.autostart_blocker()
+    if blocker:
+        print(f"Note: Offside will not start itself here ({blocker}). Start it with `offside up` or ./demo.sh.")
+    else:
+        print("If Offside isn't running when you push, it starts itself (stop it later with `offside down`).")
+    return 0
+
+
+def cmd_up() -> int:
+    backend_ok, frontend_ok = check_services()
+    if not (backend_ok and frontend_ok):
+        reason = services.start(backend_ok, frontend_ok)
+        if reason:
+            print(f"offside: {reason}", file=sys.stderr)
+            return 1
+    print(f"Offside is running.\n  backend   {config.BACKEND_URL}\n  frontend  {config.FRONTEND_URL}")
+    print("Stop it with `offside down`.")
+    return 0
+
+
+def cmd_down() -> int:
+    stopped = services.stop()
+    print(f"Stopped: {', '.join(stopped)}." if stopped else "Nothing that Offside started is running.")
+    return 0
+
+
 def check_services(timeout: float = 2.0) -> tuple[bool, bool]:
     """Is the backend healthy, and is the review page reachable? Both are needed to finish a review."""
 
@@ -115,8 +160,18 @@ def cmd_doctor() -> int:
         print(f"  {'ok ' if good else 'NO '} {name.ljust(9)} {detail}")
 
     print("Offside doctor")
-    line(backend_ok, "backend", f"{config.BACKEND_URL} " + ("is healthy" if backend_ok else "is not responding. Start it with ./demo.sh"))
-    line(frontend_ok, "frontend", f"{config.FRONTEND_URL} " + ("is reachable" if frontend_ok else "is not responding. Start it with ./demo.sh"))
+    blocker = services.autostart_blocker()
+
+    def service(ok: bool, name: str, url: str, up: str) -> None:
+        if ok:
+            line(True, name, f"{url} {up}")
+        elif blocker is None:
+            line(True, name, f"{url} is not running yet. A push will start it.")  # not a problem: it starts itself
+        else:
+            line(False, name, f"{url} is not responding. Start it with `offside up`.")
+
+    service(backend_ok, "backend", config.BACKEND_URL, "is healthy")
+    service(frontend_ok, "frontend", config.FRONTEND_URL, "is reachable")
 
     try:
         hook_path = hook_mod.hooks_dir() / "pre-push"
@@ -125,6 +180,7 @@ def cmd_doctor() -> int:
     except RuntimeError:
         line(False, "hook", "this is not a git repository")
 
+    line(True, "autostart", "on: a push starts Offside if it is not running" if not blocker else f"off: {blocker}")
     line(True, "level", prefs.get("level"))
     policy = "fail open (push continues if Offside is down)" if config.FAIL_OPEN else "fail closed (push blocked if Offside is down)"
     line(True, "policy", policy + ". Set OFFSIDE_FAIL_OPEN=0 to block.")
@@ -160,10 +216,12 @@ def cmd_pre_push() -> None:
         print("Offside: explanation level is mid. Change it with `offside config level <intern|mid|staff>`.")
 
     backend_ok, frontend_ok = check_services()
-    if not backend_ok:
-        sys.exit(_fail_open(f"The Offside backend is not responding at {config.BACKEND_URL}."))
-    if not frontend_ok:
-        sys.exit(_fail_open(f"The Offside review page is not responding at {config.FRONTEND_URL}."))
+    if not (backend_ok and frontend_ok):
+        print("\nOffside is not running. Starting it for this push...")
+        reason = services.start(backend_ok, frontend_ok)
+        if reason:
+            sys.exit(_fail_open(reason))
+        print("  ready.\n")
 
     repo_root = git_info.repo_root()
     repo_slug = git_info.current_repo_slug()
@@ -271,7 +329,7 @@ def _fail_open(message: str) -> int:
     verdict = "Failing open, this push will go through UNREVIEWED." if config.FAIL_OPEN else "Failing closed, push blocked."
     bar = "=" * 62
     print(f"\n{bar}\n  OFFSIDE IS NOT RUNNING: this push was NOT reviewed\n  {message}")
-    print("  Start it with ./demo.sh (from the offside repo), then push again.")
+    print("  Start it with `offside up` (or ./demo.sh from the offside repo), then push again.")
     print(f"  Offside: {verdict}")
     print("  (Set OFFSIDE_FAIL_OPEN=0 to block pushes when Offside is down.)")
     print(f"{bar}\n")
